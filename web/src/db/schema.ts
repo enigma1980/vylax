@@ -223,7 +223,10 @@ export const dailyReports = pgTable(
     windowsUpdate:  jsonb('windows_update'),
     createdAt:      tstz('created_at').notNull().defaultNow(),
   },
-  (t) => [index('daily_reports_device_idx').on(t.deviceId)],
+  (t) => [
+    index('daily_reports_device_idx').on(t.deviceId),
+    uniqueIndex('daily_reports_device_collected_at_idx').on(t.deviceId, t.collectedAt),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -264,7 +267,7 @@ export const inventorySnapshots = pgTable(
     physicalDisks:    jsonb('physical_disks'),
     createdAt:        tstz('created_at').notNull().defaultNow(),
   },
-  (t) => [index('inventory_snapshots_device_hash_idx').on(t.deviceId, t.hash)],
+  (t) => [uniqueIndex('inventory_snapshots_device_hash_idx').on(t.deviceId, t.hash)],
 );
 
 // ---------------------------------------------------------------------------

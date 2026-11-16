@@ -161,7 +161,7 @@ async function processDaily(deviceId: string, orgId: string, r: DailyReport) {
     collectedAt:    new Date(r.collected_at),
     physicalDisks:  r.physical_disks ?? null,
     windowsUpdate:  r.windows_update ?? null,
-  });
+  }).onConflictDoNothing();
 
   await db
     .insert(deviceCurrentState)
@@ -193,6 +193,7 @@ async function processInventory(
   r: InventoryReport,
   sentAt: string,
 ) {
+  // Solo guarda un snapshot nuevo si el hash cambia respecto al último almacenado
   await db.insert(inventorySnapshots).values({
     deviceId,
     organizationId:   orgId,
@@ -203,7 +204,7 @@ async function processInventory(
     memoryTotalBytes: r.memory_total_bytes ?? null,
     osInfo:           r.os ?? null,            // campo real: "os"
     physicalDisks:    r.physical_disks ?? null,
-  });
+  }).onConflictDoNothing();
 
   await db
     .insert(deviceCurrentState)
@@ -340,8 +341,8 @@ export async function POST(req: NextRequest) {
     .where(eq(devices.id, device.id));
 
   return NextResponse.json({
-    ok:               true,
-    reports_received: envelope.reports.length,
+    accepted:          envelope.reports.length,
+    config_version:    device.configVersion,
     request_inventory: requestInventory,
   });
 }

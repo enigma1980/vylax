@@ -9,7 +9,9 @@
     "db:generate": "dotenv -e .env.local -- drizzle-kit generate",
     "db:migrate": "dotenv -e .env.local -- drizzle-kit migrate",
     "db:seed": "dotenv -e .env.local -- tsx scripts/seed.ts",
-    "test": "tsx --test test/validators.test.ts"
+    "test": "tsx --test test/validators.test.ts",
+    "test:integration": "dotenv -e .env.local -- tsx --test test/idempotency.test.ts",
+    "db:reset": "dotenv -e .env.local -- tsx scripts/reset.ts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.4",
