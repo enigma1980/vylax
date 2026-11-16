@@ -106,13 +106,14 @@ func collectDiskHealth() []report.DiskHealth {
 				log.Printf("aviso daily: StorageReliabilityCounter (disco %s): %v", serial, err)
 			} else if len(counters) > 0 {
 				rc := counters[0]
+				// Temperature==0 significa que el disco no expone el contador SMART
+				// (p.ej. USB). En ese caso dejamos ambos campos vacíos.
 				if rc.Temperature > 0 {
 					t := int(rc.Temperature)
 					dh.TemperatureC = &t
+					w := int(rc.Wear)
+					dh.WearPct = &w
 				}
-				// Wear: se envía aunque sea 0 (SSD nuevo = 0 %).
-				w := int(rc.Wear)
-				dh.WearPct = &w
 			}
 		}
 

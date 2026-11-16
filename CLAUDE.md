@@ -17,6 +17,7 @@ multiempresa (organización → cliente → sede → equipo), alertas e informes
 - Al explicar cambios, muestra solo los fragmentos modificados, no archivos completos.
 - No añadas funciones fuera del alcance de la V1 sin preguntar.
 - Desarrollo en Windows (PowerShell). Los comandos que propongas deben funcionar ahí.
+- Tras cada cambio en `agent/`, recompila con: `go build -o vylax-agent.exe .`
 
 ## Estructura del repositorio
 
