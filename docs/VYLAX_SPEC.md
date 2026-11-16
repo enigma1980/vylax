@@ -685,9 +685,9 @@ Si `config_version` es mayor que la que tiene, el agente pide `GET /v1/config`. 
 
 Se avanza un paso cada vez y cada paso se confirma antes del siguiente. Marcar cada uno al terminarlo.
 
-- [ ] **Paso 0 – Contrato de datos:** formato JSON de registro, métricas, estado, inventario y eventos del ciclo de vida.
-- [ ] **Paso 1 – Estructura del proyecto:** monorepo (`agent/`, `web/`), base de datos PostgreSQL y esquema inicial.
-- [ ] **Paso 2 – Agente mínimo:** lee CPU, RAM, discos, uptime e inventario básico y los muestra por consola.
+- [x] **Paso 0 – Contrato de datos:** formato JSON de registro, métricas, estado, inventario y eventos del ciclo de vida.
+- [x] **Paso 1 – Estructura del proyecto:** monorepo (`agent/`, `web/`), `.gitignore`, `README.md`, módulo Go.
+- [x] **Paso 2 – Agente mínimo:** lee CPU, RAM, discos, uptime e inventario básico y los muestra por consola.
 - [ ] **Paso 3 – API:** registro por token (con bandeja de pendientes) y recepción de métricas autenticada por credencial del equipo.
 - [ ] **Paso 4 – Agente completo:** envío real, caché sin conexión, servicio de Windows, eventos de ciclo de vida, límites de consumo.
 - [ ] **Paso 5 – Panel:** login con 2FA, clientes y sedes, vista global → cliente → dispositivo, asignación de pendientes.

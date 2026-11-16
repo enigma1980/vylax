@@ -1,0 +1,19 @@
+# Go
+agent/vylax-agent.exe
+agent/vylax-agent
+agent/*.exe
+agent/vendor/
+*.test
+*.out
+*.prof
+
+# Node / Next.js
+web/node_modules/
+web/.next/
+web/out/
+web/.env*.local
+
+# General
+.DS_Store
+Thumbs.db
+*.log
