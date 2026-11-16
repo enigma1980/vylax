@@ -113,12 +113,22 @@ func collectVolumes() []report.Volume {
 		if skipVolume(p.Mountpoint, p.Fstype) {
 			continue
 		}
-		usage, err := disk.Usage(p.Mountpoint)
+		mp := p.Mountpoint
+		if len(mp) > 0 && mp[len(mp)-1] != '\\' {
+			mp += `\`
+		}
+		rootPtr, err := windows.UTF16PtrFromString(mp)
 		if err != nil {
+			continue
+		}
+		// Usamos TotalNumberOfFreeBytes (3er parámetro), no FreeBytesAvailableToCaller,
+		// para que el valor sea independiente de las cuotas de disco del usuario.
+		var freeBytesAvailable, totalBytes, totalFreeBytes uint64
+		if err := windows.GetDiskFreeSpaceEx(rootPtr, &freeBytesAvailable, &totalBytes, &totalFreeBytes); err != nil {
 			// Extraíble sin medio, unidad fantasma u otro error temporal → silencio.
 			continue
 		}
-		if usage.Total == 0 {
+		if totalBytes == 0 {
 			continue
 		}
 		label := volumeLabel(p.Mountpoint)
@@ -126,8 +136,8 @@ func collectVolumes() []report.Volume {
 			Mount:      p.Mountpoint,
 			Label:      label,
 			FS:         p.Fstype,
-			TotalBytes: usage.Total,
-			FreeBytes:  usage.Free,
+			TotalBytes: totalBytes,
+			FreeBytes:  totalFreeBytes,
 		})
 	}
 	return out

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -17,6 +18,7 @@ const agentVersion = "0.1.0"
 
 func main() {
 	quick := flag.Bool("quick", false, "muestras de CPU de 1 s durante 10 s (para pruebas)")
+	outFile := flag.String("out", "", "archivo de salida JSON en UTF-8 (si se omite, usa stdout)")
 	flag.Parse()
 
 	var sampleInterval time.Duration
@@ -60,7 +62,18 @@ func main() {
 		Reports:       []report.Report{metrics, status, daily, inv},
 	}
 
-	enc := json.NewEncoder(os.Stdout)
+	var w io.Writer = os.Stdout
+	if *outFile != "" {
+		f, err := os.Create(*outFile)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error al crear archivo de salida:", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		w = f
+	}
+
+	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(envelope); err != nil {
 		fmt.Fprintln(os.Stderr, "error al serializar JSON:", err)

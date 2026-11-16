@@ -30,13 +30,12 @@ func CollectDaily() report.Daily {
 // --- SMART / salud de discos ---
 
 type msftPhysicalDisk struct {
-	DeviceId     string // número de disco ("0", "1"…)
+	ObjectId     string // clave WMI para ASSOCIATORS OF
 	SerialNumber string
 	HealthStatus uint16
 }
 
 type msftReliabilityCounter struct {
-	DeviceId    string // coincide con MSFT_PhysicalDisk.DeviceId
 	Temperature uint32
 	Wear        uint32
 }
@@ -53,36 +52,22 @@ var healthStatusNames = map[uint16]string{
 func collectDiskHealth() []report.DiskHealth {
 	var disks []msftPhysicalDisk
 	if err := wmi.QueryNamespace(
-		"SELECT DeviceId, SerialNumber, HealthStatus FROM MSFT_PhysicalDisk",
+		"SELECT ObjectId, SerialNumber, HealthStatus FROM MSFT_PhysicalDisk",
 		&disks, `ROOT\Microsoft\Windows\Storage`); err != nil {
 		log.Printf("aviso daily: MSFT_PhysicalDisk: %v", err)
 		return nil
 	}
 
-	// Contadores de fiabilidad. DeviceId en ambas tablas identifica el mismo disco.
-	var reliab []msftReliabilityCounter
-	if err := wmi.QueryNamespace(
-		"SELECT DeviceId, Temperature, Wear FROM MSFT_StorageReliabilityCounter",
-		&reliab, `ROOT\Microsoft\Windows\Storage`); err != nil {
-		log.Printf("aviso daily: MSFT_StorageReliabilityCounter: %v", err)
-	}
-	// Indexamos por DeviceId normalizado (sin espacios) para robustez.
-	reliabMap := make(map[string]msftReliabilityCounter, len(reliab))
-	for _, r := range reliab {
-		reliabMap[strings.TrimSpace(r.DeviceId)] = r
-	}
-
-	// Predicción de fallo SMART. InstanceName contiene el modelo/serie del disco.
+	// Predicción de fallo SMART via ROOT\WMI.
 	var failPred []msStorageFailurePredict
 	if err := wmi.QueryNamespace(
 		"SELECT PredictFailure, InstanceName FROM MSStorageDriver_FailurePredictStatus",
 		&failPred, `ROOT\WMI`); err != nil {
 		log.Printf("aviso daily: MSStorageDriver_FailurePredictStatus: %v", err)
 	}
-	// Indexamos por serial: buscamos el serial de cada disco en el InstanceName.
-	failBySerial := make(map[string]bool, len(failPred))
+	failByInstance := make(map[string]bool, len(failPred))
 	for _, f := range failPred {
-		failBySerial[strings.ToLower(f.InstanceName)] = f.PredictFailure
+		failByInstance[strings.ToLower(f.InstanceName)] = f.PredictFailure
 	}
 
 	out := make([]report.DiskHealth, 0, len(disks))
@@ -92,12 +77,11 @@ func collectDiskHealth() []report.DiskHealth {
 			health = "Unknown"
 		}
 
-		// Predict failure: buscamos si algún InstanceName contiene el serial del disco.
 		serial := strings.TrimSpace(d.SerialNumber)
 		predictFail := false
 		if serial != "" {
 			lserial := strings.ToLower(serial)
-			for instKey, pf := range failBySerial {
+			for instKey, pf := range failByInstance {
 				if strings.Contains(instKey, lserial) {
 					predictFail = pf
 					break
@@ -111,16 +95,22 @@ func collectDiskHealth() []report.DiskHealth {
 			PredictFailure: predictFail,
 		}
 
-		if rc, ok := reliabMap[strings.TrimSpace(d.DeviceId)]; ok {
-			// Temperature > 0 significa que el disco expone el dato SMART.
-			if rc.Temperature > 0 {
-				t := int(rc.Temperature)
-				dh.TemperatureC = &t
-			}
-			// Wear: se envía aunque sea 0 (disco nuevo) si el campo está disponible.
-			// WMI devuelve 0 cuando el disco no soporta el contador; comprobamos
-			// si Temperature también fue 0 para decidir si el contador existe.
-			if rc.Temperature > 0 {
+		// Contadores SMART via ASSOCIATORS OF (más fiable que unir por DeviceId).
+		if d.ObjectId != "" {
+			q := fmt.Sprintf(
+				`ASSOCIATORS OF {MSFT_PhysicalDisk.ObjectId="%s"} WHERE ResultClass=MSFT_StorageReliabilityCounter`,
+				wqlEscape(d.ObjectId),
+			)
+			var counters []msftReliabilityCounter
+			if err := wmi.QueryNamespace(q, &counters, `ROOT\Microsoft\Windows\Storage`); err != nil {
+				log.Printf("aviso daily: StorageReliabilityCounter (disco %s): %v", serial, err)
+			} else if len(counters) > 0 {
+				rc := counters[0]
+				if rc.Temperature > 0 {
+					t := int(rc.Temperature)
+					dh.TemperatureC = &t
+				}
+				// Wear: se envía aunque sea 0 (SSD nuevo = 0 %).
 				w := int(rc.Wear)
 				dh.WearPct = &w
 			}
@@ -131,6 +121,13 @@ func collectDiskHealth() []report.DiskHealth {
 
 	sort.Slice(out, func(i, j int) bool { return out[i].Serial < out[j].Serial })
 	return out
+}
+
+// wqlEscape escapa barras y comillas dobles en un literal de cadena WQL.
+func wqlEscape(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return s
 }
 
 // --- Windows Update via COM (IUpdateSearcher.QueryHistory) ---
