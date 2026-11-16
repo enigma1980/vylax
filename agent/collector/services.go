@@ -38,7 +38,7 @@ func collectServices(criticalServices []string, ignoreServices []string) report.
 		criticalSet[strings.ToLower(s)] = struct{}{}
 	}
 
-	var autoNotRunning []string
+	var autoNotRunning []report.AutoNotRunningService
 	var critical []report.CriticalService
 
 	for _, name := range names {
@@ -67,8 +67,8 @@ func collectServices(criticalServices []string, ignoreServices []string) report.
 		isAuto := cfg.StartType == mgr.StartAutomatic
 		isRunning := status.State == windows.SERVICE_RUNNING
 
-		// Servicios de inicio por desencadenador: tienen StartType AUTO pero también
-		// triggers registrados; los identificamos leyendo la clave de triggers del registro.
+		// Servicios trigger-start: arrancan solo cuando ocurre el evento correspondiente,
+		// por diseño no están en marcha todo el tiempo. Se excluyen de auto_not_running.
 		if isAuto && hasTriggerStart(name) {
 			svc.Close()
 			continue
@@ -81,7 +81,16 @@ func collectServices(criticalServices []string, ignoreServices []string) report.
 			}
 			critical = append(critical, report.CriticalService{Name: name, State: state})
 		} else if isAuto && !isRunning {
-			autoNotRunning = append(autoNotRunning, name)
+			startType := "auto"
+			if cfg.DelayedAutoStart {
+				startType = "delayed"
+			}
+			autoNotRunning = append(autoNotRunning, report.AutoNotRunningService{
+				Name:        name,
+				DisplayName: cfg.DisplayName,
+				Start:       startType,
+				ExitCode:    status.Win32ExitCode,
+			})
 		}
 
 		svc.Close()

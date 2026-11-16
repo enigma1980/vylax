@@ -3,8 +3,11 @@
 package collector
 
 import (
+	"fmt"
 	"log"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -27,14 +30,13 @@ func CollectDaily() report.Daily {
 // --- SMART / salud de discos ---
 
 type msftPhysicalDisk struct {
-	DeviceID       string
-	SerialNumber   string
-	HealthStatus   uint16
-	Size           uint64
+	DeviceId     string // número de disco ("0", "1"…)
+	SerialNumber string
+	HealthStatus uint16
 }
 
 type msftReliabilityCounter struct {
-	DeviceID    string
+	DeviceId    string // coincide con MSFT_PhysicalDisk.DeviceId
 	Temperature uint32
 	Wear        uint32
 }
@@ -51,38 +53,36 @@ var healthStatusNames = map[uint16]string{
 func collectDiskHealth() []report.DiskHealth {
 	var disks []msftPhysicalDisk
 	if err := wmi.QueryNamespace(
-		"SELECT DeviceID, SerialNumber, HealthStatus, Size FROM MSFT_PhysicalDisk",
+		"SELECT DeviceId, SerialNumber, HealthStatus FROM MSFT_PhysicalDisk",
 		&disks, `ROOT\Microsoft\Windows\Storage`); err != nil {
 		log.Printf("aviso daily: MSFT_PhysicalDisk: %v", err)
 		return nil
 	}
 
-	// Contadores de fiabilidad (temperatura, desgaste) indexados por DeviceID
+	// Contadores de fiabilidad. DeviceId en ambas tablas identifica el mismo disco.
 	var reliab []msftReliabilityCounter
 	if err := wmi.QueryNamespace(
-		"SELECT DeviceID, Temperature, Wear FROM MSFT_StorageReliabilityCounter",
+		"SELECT DeviceId, Temperature, Wear FROM MSFT_StorageReliabilityCounter",
 		&reliab, `ROOT\Microsoft\Windows\Storage`); err != nil {
 		log.Printf("aviso daily: MSFT_StorageReliabilityCounter: %v", err)
 	}
+	// Indexamos por DeviceId normalizado (sin espacios) para robustez.
 	reliabMap := make(map[string]msftReliabilityCounter, len(reliab))
 	for _, r := range reliab {
-		reliabMap[r.DeviceID] = r
+		reliabMap[strings.TrimSpace(r.DeviceId)] = r
 	}
 
-	// Predicción de fallo SMART via MSStorageDriver_FailurePredictStatus
+	// Predicción de fallo SMART. InstanceName contiene el modelo/serie del disco.
 	var failPred []msStorageFailurePredict
 	if err := wmi.QueryNamespace(
 		"SELECT PredictFailure, InstanceName FROM MSStorageDriver_FailurePredictStatus",
 		&failPred, `ROOT\WMI`); err != nil {
 		log.Printf("aviso daily: MSStorageDriver_FailurePredictStatus: %v", err)
 	}
-	// InstanceName tiene la forma "SCSI\Disk&Ven_...&Prod_...&Rev_...\X&...&0&..."
-	// Guardamos todos los que predicen fallo para cruzar más tarde.
-	failSet := make(map[bool]struct{}) // simplificado: si alguno predice fallo lo indicamos
-	_ = failSet
-	failMap := make(map[string]bool, len(failPred))
+	// Indexamos por serial: buscamos el serial de cada disco en el InstanceName.
+	failBySerial := make(map[string]bool, len(failPred))
 	for _, f := range failPred {
-		failMap[f.InstanceName] = f.PredictFailure
+		failBySerial[strings.ToLower(f.InstanceName)] = f.PredictFailure
 	}
 
 	out := make([]report.DiskHealth, 0, len(disks))
@@ -92,27 +92,35 @@ func collectDiskHealth() []report.DiskHealth {
 			health = "Unknown"
 		}
 
-		// Predict failure: buscamos la entrada cuyo InstanceName contenga el serial
+		// Predict failure: buscamos si algún InstanceName contiene el serial del disco.
+		serial := strings.TrimSpace(d.SerialNumber)
 		predictFail := false
-		for instName, pf := range failMap {
-			_ = instName // en este prototipo asignamos por índice si solo hay uno
-			if pf {
-				predictFail = true
+		if serial != "" {
+			lserial := strings.ToLower(serial)
+			for instKey, pf := range failBySerial {
+				if strings.Contains(instKey, lserial) {
+					predictFail = pf
+					break
+				}
 			}
 		}
 
 		dh := report.DiskHealth{
-			Serial:         d.SerialNumber,
+			Serial:         serial,
 			Health:         health,
 			PredictFailure: predictFail,
 		}
 
-		if rc, ok := reliabMap[d.DeviceID]; ok {
+		if rc, ok := reliabMap[strings.TrimSpace(d.DeviceId)]; ok {
+			// Temperature > 0 significa que el disco expone el dato SMART.
 			if rc.Temperature > 0 {
 				t := int(rc.Temperature)
 				dh.TemperatureC = &t
 			}
-			if rc.Wear > 0 {
+			// Wear: se envía aunque sea 0 (disco nuevo) si el campo está disponible.
+			// WMI devuelve 0 cuando el disco no soporta el contador; comprobamos
+			// si Temperature también fue 0 para decidir si el contador existe.
+			if rc.Temperature > 0 {
 				w := int(rc.Wear)
 				dh.WearPct = &w
 			}
@@ -138,45 +146,52 @@ func collectWindowsUpdate() report.WindowsUpdate {
 }
 
 func windowsUpdateViaCOM() (report.WindowsUpdate, error) {
-	if err := ole.CoInitializeEx(0, ole.COINIT_MULTITHREADED); err != nil {
-		if err.(*ole.OleError).Code() != 0x80010106 { // ya inicializado
-			return report.WindowsUpdate{}, err
+	// IUpdateSearcher es un objeto STA; usar ApartmentThreaded.
+	hr := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED)
+	if hr != nil {
+		oleErr, ok := hr.(*ole.OleError)
+		if !ok || (oleErr.Code() != 0x80010106 && oleErr.Code() != 1) {
+			// 0x80010106 = ya inicializado en este hilo; 1 = S_FALSE (ya inicializado)
+			return report.WindowsUpdate{}, fmt.Errorf("CoInitializeEx: %w", hr)
 		}
 	}
 	defer ole.CoUninitialize()
 
 	unknown, err := oleutil.CreateObject("Microsoft.Update.Session")
 	if err != nil {
-		return report.WindowsUpdate{}, err
+		return report.WindowsUpdate{}, fmt.Errorf("crear Microsoft.Update.Session: %w", err)
 	}
 	defer unknown.Release()
 
 	session, err := unknown.QueryInterface(ole.IID_IDispatch)
 	if err != nil {
-		return report.WindowsUpdate{}, err
+		return report.WindowsUpdate{}, fmt.Errorf("QueryInterface IDispatch: %w", err)
 	}
 	defer session.Release()
 
-	searcher, err := oleutil.CallMethod(session, "CreateUpdateSearcher")
+	searcherV, err := oleutil.CallMethod(session, "CreateUpdateSearcher")
 	if err != nil {
-		return report.WindowsUpdate{}, err
+		return report.WindowsUpdate{}, fmt.Errorf("CreateUpdateSearcher: %w", err)
 	}
-	searcherDisp := searcher.ToIDispatch()
-	defer searcherDisp.Release()
+	searcher := searcherV.ToIDispatch()
+	defer searcher.Release()
 
-	// QueryHistory(0, 20): las últimas 20 actualizaciones instaladas
-	histV, err := oleutil.CallMethod(searcherDisp, "QueryHistory", int32(0), int32(20))
+	// QueryHistory(startIndex=0, count=50): primeros 50 registros del historial.
+	histV, err := oleutil.CallMethod(searcher, "QueryHistory", int32(0), int32(50))
 	if err != nil {
-		return report.WindowsUpdate{}, err
+		return report.WindowsUpdate{}, fmt.Errorf("QueryHistory: %w", err)
 	}
 	hist := histV.ToIDispatch()
 	defer hist.Release()
 
 	countV, err := oleutil.GetProperty(hist, "Count")
 	if err != nil {
-		return report.WindowsUpdate{}, err
+		return report.WindowsUpdate{}, fmt.Errorf("Count: %w", err)
 	}
 	count := int(countV.Val)
+	if count == 0 {
+		return report.WindowsUpdate{}, nil
+	}
 
 	var latest time.Time
 	var latestKB string
@@ -189,34 +204,55 @@ func windowsUpdateViaCOM() (report.WindowsUpdate, error) {
 		item := itemV.ToIDispatch()
 
 		// ResultCode: 2 = Succeeded, 3 = SucceededWithErrors
-		rcV, _ := oleutil.GetProperty(item, "ResultCode")
-		rc := int(rcV.Val)
-		if rc != 2 && rc != 3 {
+		rcV, err := oleutil.GetProperty(item, "ResultCode")
+		if err != nil {
+			item.Release()
+			continue
+		}
+		if rc := int(rcV.Val); rc != 2 && rc != 3 {
 			item.Release()
 			continue
 		}
 
-		dateV, _ := oleutil.GetProperty(item, "Date")
+		dateV, err := oleutil.GetProperty(item, "Date")
+		if err != nil {
+			item.Release()
+			continue
+		}
 		titleV, _ := oleutil.GetProperty(item, "Title")
 
-		// Date es un OLE DATE (float64, días desde 30/12/1899)
-		if dateV.VT == ole.VT_DATE {
-			t := oleutil.MustGetProperty(item, "Date")
-			_ = t
-			// Convertimos el OLE DATE a time.Time
+		// Date puede llegar como VT_DATE (float64 OLE) o VT_BSTR (cadena ISO).
+		var t2 time.Time
+		switch dateV.VT {
+		case ole.VT_DATE:
 			oleDate := *(*float64)(unsafe.Pointer(&dateV.Val))
-			t2 := oleDate2Time(oleDate)
-			if t2.After(latest) {
-				latest = t2
-				latestKB = extractKB(titleV.ToString())
+			t2 = oleDate2Time(oleDate)
+		case ole.VT_BSTR:
+			s := dateV.ToString()
+			for _, layout := range []string{
+				time.RFC3339, "2006-01-02T15:04:05", "2006-01-02",
+			} {
+				if tt, err := time.Parse(layout, s); err == nil {
+					t2 = tt
+					break
+				}
 			}
+		default:
+			if i == 0 {
+				log.Printf("aviso daily: WU COM Date VT inesperado: %d (val=%v)",
+					dateV.VT, dateV.Val)
+			}
+		}
+		if !t2.IsZero() && t2.After(latest) {
+			latest = t2
+			latestKB = extractKB(titleV.ToString())
 		}
 
 		item.Release()
 	}
 
 	if latest.IsZero() {
-		return report.WindowsUpdate{}, nil
+		return report.WindowsUpdate{}, fmt.Errorf("historial COM no devolvió actualizaciones correctas (count=%d)", count)
 	}
 	return report.WindowsUpdate{
 		LastInstalledAt: latest.UTC().Format(time.RFC3339),
@@ -287,10 +323,47 @@ func windowsUpdateViaQFE() report.WindowsUpdate {
 }
 
 func parseQFEDate(s string) time.Time {
-	for _, layout := range []string{"1/2/2006", "1/2/2006 15:04:05", "2006-01-02"} {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}
+	}
+
+	// Formatos con separador conocido.
+	for _, layout := range []string{
+		"1/2/2006", "1/2/2006 15:04:05", // americano M/D/YYYY
+		"2/1/2006", "2/1/2006 15:04:05", // europeo D/M/YYYY
+		"2006-01-02",                     // ISO
+	} {
 		if t, err := time.Parse(layout, s); err == nil {
 			return t
 		}
 	}
+
+	// Formato genérico con separadores / o - : intentamos detectar si es
+	// D/M/YYYY o M/D/YYYY comprobando si el primer número > 12 (solo puede ser día).
+	parts := strings.FieldsFunc(s, func(r rune) bool { return r == '/' || r == '-' })
+	if len(parts) == 3 {
+		p0, _ := strconv.Atoi(parts[0])
+		p1, _ := strconv.Atoi(parts[1])
+		year, _ := strconv.Atoi(parts[2])
+		if year < 100 {
+			year += 2000
+		}
+		// Si el primer campo > 12, es el día (formato europeo D/M/YYYY).
+		// Si el segundo campo > 12, es el día (formato americano M/D/YYYY).
+		day, month := p0, p1
+		if p0 <= 12 && p1 <= 12 {
+			// Ambiguo: asumimos europeo (D/M) para localización en español.
+			day, month = p0, p1
+		} else if p0 > 12 {
+			day, month = p0, p1
+		} else {
+			day, month = p1, p0
+		}
+		if month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 2000 {
+			return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+		}
+	}
+
 	return time.Time{}
 }

@@ -47,13 +47,20 @@ type Volume struct {
 }
 
 type Services struct {
-	Critical      []CriticalService `json:"critical,omitempty"`
-	AutoNotRunning []string         `json:"auto_not_running,omitempty"`
+	Critical       []CriticalService       `json:"critical,omitempty"`
+	AutoNotRunning []AutoNotRunningService  `json:"auto_not_running,omitempty"`
 }
 
 type CriticalService struct {
 	Name  string `json:"name"`
 	State string `json:"state"`
+}
+
+type AutoNotRunningService struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	Start       string `json:"start"`     // "auto" | "delayed"
+	ExitCode    uint32 `json:"exit_code"`
 }
 
 type AgentSelf struct {

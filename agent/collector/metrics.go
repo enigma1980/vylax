@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"time"
+	"unsafe"
 
 	"github.com/enigma1980/vylax/agent/report"
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -13,6 +14,7 @@ import (
 	"github.com/shirou/gopsutil/v4/host"
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/process"
+	"golang.org/x/sys/windows"
 )
 
 // CollectMetrics toma muestras de CPU durante el intervalo indicado y devuelve
@@ -108,9 +110,15 @@ func collectVolumes() []report.Volume {
 	}
 	out := make([]report.Volume, 0, len(parts))
 	for _, p := range parts {
+		if skipVolume(p.Mountpoint, p.Fstype) {
+			continue
+		}
 		usage, err := disk.Usage(p.Mountpoint)
 		if err != nil {
-			log.Printf("aviso metrics: uso disco %s: %v", p.Mountpoint, err)
+			// Extraíble sin medio, unidad fantasma u otro error temporal → silencio.
+			continue
+		}
+		if usage.Total == 0 {
 			continue
 		}
 		label := volumeLabel(p.Mountpoint)
@@ -123,6 +131,68 @@ func collectVolumes() []report.Volume {
 		})
 	}
 	return out
+}
+
+// skipVolume decide si una unidad debe excluirse del informe.
+func skipVolume(mountpoint, fstype string) bool {
+	mp := mountpoint
+	if len(mp) > 0 && mp[len(mp)-1] != '\\' {
+		mp += `\`
+	}
+	root, err := windows.UTF16PtrFromString(mp)
+	if err != nil {
+		return true
+	}
+	dtype := windows.GetDriveType(root)
+	switch dtype {
+	case windows.DRIVE_REMOTE,  // red o virtual mapeada
+		windows.DRIVE_CDROM,    // CD/DVD
+		windows.DRIVE_RAMDISK:  // ramdisk
+		return true
+	case windows.DRIVE_UNKNOWN, windows.DRIVE_NO_ROOT_DIR:
+		return true
+	}
+	if fstype == "" {
+		return true
+	}
+	// Para unidades FIXED y REMOVABLE comprobamos que haya un dispositivo físico
+	// real detrás (IOCTL_STORAGE_GET_DEVICE_NUMBER). Las unidades virtuales en la
+	// nube (Google Drive File Stream, OneDrive, etc.) montan como DRIVE_FIXED pero
+	// no tienen número de dispositivo de almacenamiento y fallan este IOCTL.
+	if dtype == windows.DRIVE_FIXED || dtype == windows.DRIVE_REMOVABLE {
+		return !hasPhysicalDevice(mountpoint)
+	}
+	return false
+}
+
+// hasPhysicalDevice usa QueryDosDevice para obtener el nombre NT del volumen.
+// Los discos físicos (internos y USB externos) devuelven "\Device\HarddiskVolumeN".
+// Las unidades virtuales (Google Drive, OneDrive, etc.) devuelven otros prefijos
+// y se excluyen del informe.
+func hasPhysicalDevice(mountpoint string) bool {
+	vol := mountpoint
+	for len(vol) > 0 && (vol[len(vol)-1] == '\\' || vol[len(vol)-1] == '/') {
+		vol = vol[:len(vol)-1]
+	}
+	if len(vol) != 2 || vol[1] != ':' {
+		return true
+	}
+	ptr, err := windows.UTF16PtrFromString(vol)
+	if err != nil {
+		return false
+	}
+	buf := make([]uint16, 512)
+	r, _, _ := procQueryDosDeviceW.Call(
+		uintptr(unsafe.Pointer(ptr)),
+		uintptr(unsafe.Pointer(&buf[0])),
+		uintptr(len(buf)),
+	)
+	if r == 0 {
+		return false
+	}
+	devPath := windows.UTF16ToString(buf)
+	const prefix = `\Device\HarddiskVolu`
+	return len(devPath) >= len(prefix) && devPath[:len(prefix)] == prefix
 }
 
 func collectUptime() int64 {

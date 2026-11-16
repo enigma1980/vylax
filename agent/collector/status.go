@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 	"syscall"
 	"time"
 	"unsafe"
@@ -99,14 +100,41 @@ type avProduct struct {
 	ProductState uint32
 }
 
-// productState codifica: bits 12-19 = estado real-time, bits 4-11 = firmas.
-// 0x1000 = enabled, 0x0010 = up_to_date (firmas al día).
+// decodeProductState interpreta el campo ProductState de AntiVirusProduct.
+// Formato de 24 bits (en hex): 0xSSRR00
+//
+//	bits 19-16 (nibble S alto): estado de protección en tiempo real (1=activo)
+//	bits 15-12 (nibble S bajo): ídem
+//	bits 11-8  (nibble R alto): estado de firmas (0x00=al día, 0x10=desactualizado)
+//	bits 7-0   (byte bajo):     flags de producto
 func decodeProductState(state uint32) (enabled, upToDate bool) {
 	rtState := (state >> 12) & 0xF
-	sigState := (state >> 4) & 0xFF
+	sigNibble := (state >> 4) & 0xF
 	enabled = rtState == 1
-	upToDate = sigState == 0
+	// sigNibble==0 → firmas al día; cualquier otro valor → desactualizadas.
+	upToDate = sigNibble == 0
 	return
+}
+
+type msftMpStatus struct {
+	AntivirusSignatureAge int32
+}
+
+// defenderSignatureUpToDate comprueba si las firmas de Defender están al día
+// consultando directamente ROOT\Microsoft\Windows\Defender MSFT_MpComputerStatus.
+// Devuelve (upToDate, ok): ok=false si la consulta falla.
+func defenderSignatureUpToDate() (bool, bool) {
+	var rows []msftMpStatus
+	q := "SELECT AntivirusSignatureAge FROM MSFT_MpComputerStatus"
+	if err := wmi.QueryNamespace(q, &rows, `ROOT\Microsoft\Windows\Defender`); err != nil {
+		log.Printf("aviso status: MSFT_MpComputerStatus: %v", err)
+		return false, false
+	}
+	if len(rows) == 0 {
+		return false, false
+	}
+	// Age en días; 0 = actualizado hoy, <=3 se considera al día (igual que AV estándar).
+	return rows[0].AntivirusSignatureAge <= 3, true
 }
 
 func collectAntivirus() []report.Antivirus {
@@ -117,9 +145,25 @@ func collectAntivirus() []report.Antivirus {
 		return nil
 	}
 
+	// Leer estado de Defender una sola vez si hay algún producto Defender.
+	defenderChecked := false
+	defenderUpToDate := false
+
 	out := make([]report.Antivirus, 0, len(products))
 	for _, p := range products {
 		enabled, upToDate := decodeProductState(p.ProductState)
+
+		// Para Windows Defender usamos MSFT_MpComputerStatus que es más fiable.
+		if strings.Contains(strings.ToLower(p.DisplayName), "windows defender") ||
+			strings.Contains(strings.ToLower(p.DisplayName), "microsoft defender") {
+			if !defenderChecked {
+				defenderUpToDate, defenderChecked = defenderSignatureUpToDate()
+			}
+			if defenderChecked {
+				upToDate = defenderUpToDate
+			}
+		}
+
 		out = append(out, report.Antivirus{
 			Product:  p.DisplayName,
 			Enabled:  enabled,
@@ -217,33 +261,39 @@ func collectNetwork() report.Network {
 }
 
 func getAdaptersInfo() ([]report.NetworkAdapter, error) {
-	// Llamamos a GetAdaptersAddresses con GAA_FLAG_INCLUDE_GATEWAYS | GAA_FLAG_INCLUDE_ALL_INTERFACES
 	const (
-		flagIncludeGateways = 0x0040
-		flagSkipFriendly    = 0x0000
+		flagIncludeGateways = 0x0080 // GAA_FLAG_INCLUDE_GATEWAYS
 	)
 	flags := uint32(flagIncludeGateways)
 
 	var size uint32
-	// Primera llamada para obtener el tamaño necesario.
 	windows.GetAdaptersAddresses(windows.AF_UNSPEC, flags, 0, nil, &size)
 	if size == 0 {
 		return nil, fmt.Errorf("GetAdaptersAddresses: tamaño 0")
 	}
-
+	// Añadimos margen por si la lista crece entre las dos llamadas.
+	size += 4096
 	buf := make([]byte, size)
 	head := (*windows.IpAdapterAddresses)(unsafe.Pointer(&buf[0]))
 	if err := windows.GetAdaptersAddresses(windows.AF_UNSPEC, flags, 0, head, &size); err != nil {
 		return nil, err
 	}
 
+	const (
+		ifTypeSoftwareLoopback = 24
+		ifTypeTunnel           = 131
+	)
+
 	var out []report.NetworkAdapter
 	for aa := head; aa != nil; aa = aa.Next {
-		// Solo adaptadores con IPv4 y que estén activos (OperStatus == 1)
+		// Solo adaptadores activos y físicos/virtuales reales.
 		if aa.OperStatus != windows.IfOperStatusUp {
 			continue
 		}
-		name := windows.UTF16PtrToString(aa.FriendlyName)
+		// Excluir loopback y túneles.
+		if aa.IfType == ifTypeSoftwareLoopback || aa.IfType == ifTypeTunnel {
+			continue
+		}
 
 		var ipv4s []string
 		for ua := aa.FirstUnicastAddress; ua != nil; ua = ua.Next {
@@ -258,6 +308,8 @@ func getAdaptersInfo() ([]report.NetworkAdapter, error) {
 		if len(ipv4s) == 0 {
 			continue
 		}
+
+		name := windows.UTF16PtrToString(aa.FriendlyName)
 
 		var gw string
 		for ga := aa.FirstGatewayAddress; ga != nil; ga = ga.Next {
@@ -276,7 +328,6 @@ func getAdaptersInfo() ([]report.NetworkAdapter, error) {
 			}
 		}
 
-		// Velocidad del enlace en Mbps (TransmitLinkSpeed está en bits/s)
 		linkMbps := aa.TransmitLinkSpeed / 1_000_000
 
 		out = append(out, report.NetworkAdapter{
@@ -331,8 +382,7 @@ type systemPowerStatus struct {
 	BatteryFullLifeTime uint32
 }
 
-var kernel32                = windows.NewLazySystemDLL("kernel32.dll")
-var procGetSystemPowerStatus = kernel32.NewProc("GetSystemPowerStatus")
+var procGetSystemPowerStatus = dllKernel32.NewProc("GetSystemPowerStatus")
 
 func collectOnBattery() bool {
 	var status systemPowerStatus

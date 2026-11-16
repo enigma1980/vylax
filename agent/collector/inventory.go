@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/enigma1980/vylax/agent/report"
@@ -47,6 +48,30 @@ type msftPhysicalDiskInv struct {
 	Size         uint64 // en bytes
 }
 
+// placeholders de relleno que los fabricantes dejan en los campos BIOS/DMI.
+var hwPlaceholders = map[string]struct{}{
+	"system serial number":    {},
+	"to be filled by o.e.m.": {},
+	"default string":          {},
+	"0123456789":              {},
+	"all series":              {},
+	"n/a":                     {},
+	"none":                    {},
+	"not applicable":          {},
+	"not specified":           {},
+	"chassis serial number":   {},
+	"base board serial number":{},
+	"ffffffff":                {},
+}
+
+func cleanHWString(s string) string {
+	s = strings.TrimSpace(s)
+	if _, ok := hwPlaceholders[strings.ToLower(s)]; ok {
+		return ""
+	}
+	return s
+}
+
 var chassisTypeNames = map[uint16]string{
 	1: "other", 2: "unknown", 3: "desktop", 4: "low-profile-desktop",
 	5: "pizza-box", 6: "mini-tower", 7: "tower", 8: "portable",
@@ -80,8 +105,8 @@ func CollectInventory() (report.Inventory, string) {
 	if err := wmi.Query("SELECT Manufacturer, Model FROM Win32_ComputerSystem", &cs); err != nil {
 		log.Printf("aviso inventory: Win32_ComputerSystem: %v", err)
 	} else if len(cs) > 0 {
-		inv.System.Manufacturer = cs[0].Manufacturer
-		inv.System.Model = cs[0].Model
+		inv.System.Manufacturer = cleanHWString(cs[0].Manufacturer)
+		inv.System.Model = cleanHWString(cs[0].Model)
 	}
 
 	// Número de serie: Win32_BIOS para versión BIOS + Win32_SystemEnclosure para serie
@@ -93,8 +118,8 @@ func CollectInventory() (report.Inventory, string) {
 	if err := wmi.Query("SELECT SMBIOSBIOSVersion, SerialNumber FROM Win32_BIOS", &bios); err != nil {
 		log.Printf("aviso inventory: Win32_BIOS: %v", err)
 	} else if len(bios) > 0 {
-		inv.System.BIOSVersion = bios[0].SMBIOSBIOSVersion
-		inv.System.SerialNumber = bios[0].SerialNumber
+		inv.System.BIOSVersion = cleanHWString(bios[0].SMBIOSBIOSVersion)
+		inv.System.SerialNumber = cleanHWString(bios[0].SerialNumber)
 	}
 
 	// Chasis
@@ -206,8 +231,8 @@ func collectPhysicalDisksForInventory() []report.PhysicalDisk {
 			bus = fmt.Sprintf("bus-%d", r.BusType)
 		}
 		out = append(out, report.PhysicalDisk{
-			Model:     r.Model,
-			Serial:    r.SerialNumber,
+			Model:     cleanHWString(r.Model),
+			Serial:    cleanHWString(r.SerialNumber),
 			Media:     media,
 			Bus:       bus,
 			SizeBytes: r.Size,
