@@ -10,7 +10,7 @@ import {
   inventorySnapshots,
   agentEvents,
 } from '@/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, desc } from 'drizzle-orm';
 import { authenticateDevice } from '@/lib/device-auth';
 import {
   reportEnvelopeSchema,
@@ -193,18 +193,29 @@ async function processInventory(
   r: InventoryReport,
   sentAt: string,
 ) {
-  // Solo guarda un snapshot nuevo si el hash cambia respecto al último almacenado
-  await db.insert(inventorySnapshots).values({
-    deviceId,
-    organizationId:   orgId,
-    collectedAt:      new Date(sentAt),
-    hash:             r.hash,
-    systemInfo:       r.system ?? null,       // campo real: "system"
-    cpuInfo:          r.cpu ?? null,           // campo real: "cpu"
-    memoryTotalBytes: r.memory_total_bytes ?? null,
-    osInfo:           r.os ?? null,            // campo real: "os"
-    physicalDisks:    r.physical_disks ?? null,
-  }).onConflictDoNothing();
+  // Solo guardar snapshot nuevo si el hash difiere del ÚLTIMO guardado para
+  // este dispositivo. Un índice único (device_id, hash) rechazaría A→B→A,
+  // así que la deduplicación se hace a nivel de aplicación.
+  const latestSnapshot = await db
+    .select({ hash: inventorySnapshots.hash })
+    .from(inventorySnapshots)
+    .where(eq(inventorySnapshots.deviceId, deviceId))
+    .orderBy(desc(inventorySnapshots.createdAt))
+    .limit(1);
+
+  if (!latestSnapshot.length || latestSnapshot[0].hash !== r.hash) {
+    await db.insert(inventorySnapshots).values({
+      deviceId,
+      organizationId:   orgId,
+      collectedAt:      new Date(sentAt),
+      hash:             r.hash,
+      systemInfo:       r.system ?? null,
+      cpuInfo:          r.cpu ?? null,
+      memoryTotalBytes: r.memory_total_bytes ?? null,
+      osInfo:           r.os ?? null,
+      physicalDisks:    r.physical_disks ?? null,
+    });
+  }
 
   await db
     .insert(deviceCurrentState)

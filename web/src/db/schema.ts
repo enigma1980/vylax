@@ -267,7 +267,7 @@ export const inventorySnapshots = pgTable(
     physicalDisks:    jsonb('physical_disks'),
     createdAt:        tstz('created_at').notNull().defaultNow(),
   },
-  (t) => [uniqueIndex('inventory_snapshots_device_hash_idx').on(t.deviceId, t.hash)],
+  (t) => [index('inventory_snapshots_device_hash_idx').on(t.deviceId, t.hash)],
 );
 
 // ---------------------------------------------------------------------------
