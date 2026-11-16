@@ -27,11 +27,9 @@ function isPlaceholderUuid(uuid: string): boolean {
 }
 
 function getClientIp(req: NextRequest): string | null {
-  if (process.env.TRUST_PROXY === 'true') {
-    const forwarded = req.headers.get('x-forwarded-for');
-    if (forwarded) return forwarded.split(',')[0].trim();
-  }
-  return req.ip ?? null;
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  return null;
 }
 
 const bodySchema = z.object({
@@ -60,7 +58,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'parámetros incorrectos' }, { status: 400 });
   }
 
-  const data = parsed.data;
+  try {
+    return await handleEnroll(req, parsed.data);
+  } catch (err) {
+    console.error('[enroll] error interno:', err);
+    return NextResponse.json({ error: 'error interno del servidor' }, { status: 500 });
+  }
+}
+
+async function handleEnroll(
+  req: NextRequest,
+  data: ReturnType<typeof bodySchema.parse>,
+) {
   const prefix = tokenPrefix(data.enrollment_token);
   const submittedHash = sha256hex(data.enrollment_token);
 
@@ -114,8 +123,9 @@ export async function POST(req: NextRequest) {
 
   if (existingDevice) {
     // Reinstalación: reutilizar el mismo device_id, rotar credencial
-    deviceId = existingDevice.id;
-    deviceStatus = existingDevice.clientId ? 'active' : 'pending_assignment';
+    const finalClientId = matchedToken.clientId ?? existingDevice.clientId;
+    deviceStatus = finalClientId ? 'active' : 'pending_assignment';
+
     await db
       .update(devices)
       .set({
@@ -123,31 +133,39 @@ export async function POST(req: NextRequest) {
         status:            deviceStatus,
         credentialHash,
         enrollmentTokenId: matchedToken.id,
-        clientId:          matchedToken.clientId ?? existingDevice.clientId,
-        siteId:            matchedToken.siteId   ?? existingDevice.siteId,
+        clientId:          finalClientId,
+        siteId:            matchedToken.siteId ?? existingDevice.siteId,
         agentVersion:      data.agent_version ?? null,
         publicIp,
         uninstalledAt:     null,
       })
-      .where(eq(devices.id, deviceId));
+      .where(eq(devices.id, existingDevice.id));
+
+    deviceId = existingDevice.id;
+
+    // Garantizar que existe la fila de estado (puede faltar en dispositivos creados manualmente)
+    await db.insert(deviceCurrentState).values({
+      deviceId,
+      organizationId: orgId,
+    }).onConflictDoNothing();
   } else {
     // Alta nueva
     deviceStatus = matchedToken.clientId ? 'active' : 'pending_assignment';
     const inserted = await db
       .insert(devices)
       .values({
-        organizationId:     orgId,
-        clientId:           matchedToken.clientId,
-        siteId:             matchedToken.siteId,
-        hostname:           data.hostname,
-        status:             deviceStatus,
-        deviceTypeHint:     data.device_type_hint ?? null,
+        organizationId:      orgId,
+        clientId:            matchedToken.clientId,
+        siteId:              matchedToken.siteId,
+        hostname:            data.hostname,
+        status:              deviceStatus,
+        deviceTypeHint:      data.device_type_hint ?? null,
         hardwareSmbiousUuid: smbiosUuid,
-        hardwareSerial:     data.hardware_id?.serial_number ?? null,
+        hardwareSerial:      data.hardware_id?.serial_number ?? null,
         publicIp,
         credentialHash,
-        enrollmentTokenId:  matchedToken.id,
-        agentVersion:       data.agent_version ?? null,
+        enrollmentTokenId:   matchedToken.id,
+        agentVersion:        data.agent_version ?? null,
       })
       .returning({ id: devices.id });
 

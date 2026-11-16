@@ -6,11 +6,14 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'crypto';
+import { randomBytes } from 'crypto';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { count, eq, and, desc } from 'drizzle-orm';
 import * as schema from '../src/db/schema.js';
-import { sha256hex, generateDeviceSecret } from '../src/lib/crypto.js';
+import { sha256hex, generateDeviceSecret, generateEnrollmentToken, tokenPrefix } from '../src/lib/crypto.js';
+
+const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000';
 
 const skip = !process.env.DATABASE_URL
   ? 'requiere DATABASE_URL (ejecuta con npm run test:integration)'
@@ -64,13 +67,14 @@ after(async () => {
   if (skip || !orgId) return;
   try {
     // Limpiar en orden inverso a las FK (las tablas hoja primero)
-    await db.delete(schema.agentEvents)      .where(eq(schema.agentEvents.organizationId, orgId));
-    await db.delete(schema.metrics5min)      .where(eq(schema.metrics5min.organizationId, orgId));
-    await db.delete(schema.dailyReports)     .where(eq(schema.dailyReports.organizationId, orgId));
+    await db.delete(schema.agentEvents)       .where(eq(schema.agentEvents.organizationId, orgId));
+    await db.delete(schema.metrics5min)       .where(eq(schema.metrics5min.organizationId, orgId));
+    await db.delete(schema.dailyReports)      .where(eq(schema.dailyReports.organizationId, orgId));
     await db.delete(schema.inventorySnapshots).where(eq(schema.inventorySnapshots.organizationId, orgId));
     await db.delete(schema.deviceCurrentState).where(eq(schema.deviceCurrentState.organizationId, orgId));
-    await db.delete(schema.devices)          .where(eq(schema.devices.organizationId, orgId));
-    await db.delete(schema.organizations)    .where(eq(schema.organizations.id, orgId));
+    await db.delete(schema.devices)           .where(eq(schema.devices.organizationId, orgId));
+    await db.delete(schema.enrollmentTokens)  .where(eq(schema.enrollmentTokens.organizationId, orgId));
+    await db.delete(schema.organizations)     .where(eq(schema.organizations.id, orgId));
   } finally {
     await client.end();
   }
@@ -167,4 +171,86 @@ test('inventory_snapshots: vuelta a hash anterior sí guarda (A→B→A)', { ski
   await insertInventory('hash-A'); // distinto del último (B) → se guarda
   const afterABA = await countInventory();
   assert.equal(afterABA, 3, 'A→B→A debe producir 3 filas (no rechazar la vuelta a A)');
+});
+
+// ---------------------------------------------------------------------------
+// Test de reinstalación (requiere el servidor Next.js en localhost:3000)
+// ---------------------------------------------------------------------------
+
+test('enroll: reinstalación reutiliza device_id, genera nuevo secreto e invalida el anterior', { skip }, async () => {
+  // 1. Crear token de alta para la organización de prueba
+  const tokenRaw = generateEnrollmentToken();
+  const [token] = await db.insert(schema.enrollmentTokens).values({
+    organizationId: orgId,
+    tokenHash:   sha256hex(tokenRaw),
+    tokenPrefix: tokenPrefix(tokenRaw),
+    label:       'test-reinstalacion',
+  }).returning();
+
+  // 2. Crear dispositivo existente con smbios_uuid (simula alta manual o agente anterior)
+  const oldSecret = generateDeviceSecret();
+  const smbiosUuid = randomUUID();
+  const [existingDevice] = await db.insert(schema.devices).values({
+    organizationId:      orgId,
+    hostname:            'hostname-anterior',
+    credentialHash:      sha256hex(oldSecret),
+    hardwareSmbiousUuid: smbiosUuid,
+  }).returning();
+
+  // 3. Llamar al endpoint de alta con el mismo smbios_uuid
+  const resp = await fetch(`${BASE_URL}/v1/enroll`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      schema_version:   1,
+      enrollment_token: tokenRaw,
+      agent_version:    '0.1.0',
+      hostname:         'hostname-nuevo',
+      hardware_id:      { smbios_uuid: smbiosUuid },
+    }),
+  });
+
+  assert.equal(resp.status, 200, `enroll debe responder 200, recibió ${resp.status}`);
+  const data = await resp.json() as {
+    device_id: string;
+    device_secret: string;
+    status: string;
+    config: unknown;
+  };
+
+  // 4. Verificar que se reutilizó el device_id
+  assert.equal(data.device_id, existingDevice.id, 'debe reutilizar el device_id del dispositivo existente');
+  assert.ok(data.device_secret, 'debe devolver un nuevo device_secret');
+  assert.notEqual(data.device_secret, oldSecret, 'el nuevo secret debe ser distinto del anterior');
+
+  // 5. Verificar en la BD que el hash cambió y el hostname se actualizó
+  const [updated] = await db
+    .select({ credentialHash: schema.devices.credentialHash, hostname: schema.devices.hostname })
+    .from(schema.devices)
+    .where(eq(schema.devices.id, existingDevice.id));
+
+  assert.equal(updated.hostname, 'hostname-nuevo', 'debe actualizar el hostname');
+  assert.notEqual(updated.credentialHash, sha256hex(oldSecret), 'el hash del secreto anterior debe haber sido reemplazado');
+  assert.equal(updated.credentialHash, sha256hex(data.device_secret), 'el hash del nuevo secreto debe coincidir con la BD');
+
+  // 6. Verificar que el secreto anterior ya no sirve para autenticarse
+  const authResp = await fetch(`${BASE_URL}/v1/config`, {
+    headers: {
+      'Authorization': `Bearer ${oldSecret}`,
+      'X-Device-Id':   existingDevice.id,
+    },
+  });
+  assert.equal(authResp.status, 401, 'el secreto anterior debe devolver 401');
+
+  // 7. Verificar que el nuevo secreto sí funciona
+  const authRespNew = await fetch(`${BASE_URL}/v1/config`, {
+    headers: {
+      'Authorization': `Bearer ${data.device_secret}`,
+      'X-Device-Id':   data.device_id,
+    },
+  });
+  assert.equal(authRespNew.status, 200, 'el nuevo secreto debe devolver 200');
+
+  // Limpiar: el token y el dispositivo se borrarán en after() junto con la org
+  void token; // referenciado para evitar lint warning
 });

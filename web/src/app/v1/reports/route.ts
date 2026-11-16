@@ -24,11 +24,9 @@ import {
 const gunzipAsync = promisify(gunzip);
 
 function getClientIp(req: NextRequest): string | null {
-  if (process.env.TRUST_PROXY === 'true') {
-    const forwarded = req.headers.get('x-forwarded-for');
-    if (forwarded) return forwarded.split(',')[0].trim();
-  }
-  return req.ip ?? null;
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  return null;
 }
 
 async function readBody(req: NextRequest): Promise<unknown> {

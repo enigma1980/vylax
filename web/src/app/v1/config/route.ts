@@ -9,8 +9,7 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
-    schema_version: DEFAULT_CONFIG.schema_version,
-    config_version: device.configVersion,
     ...DEFAULT_CONFIG,
+    config_version: device.configVersion,  // version real del dispositivo
   });
 }
