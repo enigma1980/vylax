@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "agent_version": "0.1.0",
+  "sent_at": "2026-11-16T14:52:55Z",
+  "reports": [
+    {
+      "type": "metrics",
+      "period_start": "2026-11-16T14:52:35Z",
+      "period_end": "2026-11-16T14:52:54Z",
+      "samples": 10,
+      "cpu": {
+        "avg_pct": 18.6,
+        "max_pct": 40.6
+      },
+      "memory": {
+        "total_bytes": 12820746240,
+        "used_avg_pct": 75.9,
+        "used_max_pct": 76.1
+      },
+      "volumes": [
+        {
+          "mount": "C:",
+          "fs": "NTFS",
+          "total_bytes": 249433690112,
+          "free_bytes": 4090101760
+        },
+        {
+          "mount": "E:",
+          "label": "DATA MASTER",
+          "fs": "NTFS",
+          "total_bytes": 480101003264,
+          "free_bytes": 31978143744
+        },
+        {
+          "mount": "H:",
+          "label": "BACKUP",
+          "fs": "NTFS",
+          "total_bytes": 480101003264,
+          "free_bytes": 457722613760
+        }
+      ],
+      "services": {
+        "auto_not_running": [
+          {
+            "name": "TestService",
+            "display_name": "Servicio de prueba",
+            "start": "delayed",
+            "exit_code": 0
+          }
+        ]
+      },
+      "uptime_seconds": 24277,
+      "agent": {
+        "cpu_avg_pct": 0.5,
+        "mem_bytes": 14110720
+      }
+    },
+    {
+      "type": "status",
+      "collected_at": "2026-11-16T14:52:54Z",
+      "last_boot_at": "2026-11-16T08:08:17Z",
+      "reboot_pending": false,
+      "reboot_pending_reasons": [
+        "pending_file_rename"
+      ],
+      "antivirus": [
+        {
+          "product": "Windows Defender",
+          "enabled": true,
+          "up_to_date": true
+        }
+      ],
+      "logged_on_user": "TESTPC\\TestUser",
+      "network": {
+        "adapters": [
+          {
+            "name": "Ethernet",
+            "ipv4": ["192.168.1.100"],
+            "gateway": "192.168.1.1",
+            "dns": ["8.8.8.8", "8.8.4.4"],
+            "link_speed_mbps": 1000
+          }
+        ]
+      },
+      "metered_connection": false,
+      "on_battery": false,
+      "inventory_hash": "sha256:cc3e3ce7751097c5475b87b452de737ec39d32b1f43921f28045e477b75f44c8"
+    },
+    {
+      "type": "daily",
+      "collected_at": "2026-11-16T14:52:54Z",
+      "physical_disks": [
+        {
+          "serial": "TEST-SSD-001",
+          "health": "Healthy",
+          "predict_failure": false,
+          "temperature_c": 24,
+          "wear_pct": 0
+        },
+        {
+          "serial": "TEST-USB-001",
+          "health": "Healthy",
+          "predict_failure": false
+        },
+        {
+          "serial": "TEST-USB-002",
+          "health": "Healthy",
+          "predict_failure": false
+        }
+      ],
+      "windows_update": {
+        "last_installed_at": "2026-09-21T00:00:00Z",
+        "last_kb": "KB5126256"
+      }
+    },
+    {
+      "type": "inventory",
+      "hash": "sha256:cc3e3ce7751097c5475b87b452de737ec39d32b1f43921f28045e477b75f44c8",
+      "system": {
+        "manufacturer": "ASUS",
+        "bios_version": "2110",
+        "chassis": "desktop",
+        "smbios_uuid": "11111111-2222-3333-4444-555555555555"
+      },
+      "cpu": {
+        "model": "Intel(R) Core(TM) i5-4440 CPU @ 3.10GHz",
+        "cores": 4,
+        "threads": 4
+      },
+      "memory_total_bytes": 12820746240,
+      "os": {
+        "name": "Windows 10 Pro",
+        "version": "10.0.19045",
+        "build": "19045.6466",
+        "display_version": "22H2",
+        "install_date": "2022-11-25"
+      },
+      "physical_disks": [
+        {
+          "model": "SA400S37480G",
+          "serial": "TEST-USB-001",
+          "media": "unspecified",
+          "bus": "USB",
+          "size_bytes": 480103981056
+        },
+        {
+          "model": "SA400S37480G",
+          "serial": "TEST-USB-002",
+          "media": "unspecified",
+          "bus": "USB",
+          "size_bytes": 480103981056
+        },
+        {
+          "model": "CT250BX100SSD1",
+          "serial": "TEST-SSD-001",
+          "media": "SSD",
+          "bus": "SATA",
+          "size_bytes": 250059350016
+        }
+      ]
+    }
+  ]
+}

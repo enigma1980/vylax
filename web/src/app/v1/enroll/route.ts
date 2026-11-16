@@ -35,12 +35,16 @@ function getClientIp(req: NextRequest): string | null {
 }
 
 const bodySchema = z.object({
-  enrollment_token: z.string(),
-  hostname: z.string(),
-  smbios_uuid: z.string().optional(),
-  serial_number: z.string().optional(),
+  schema_version:    z.number().optional(),
+  enrollment_token:  z.string(),
+  agent_version:     z.string().optional(),
+  hostname:          z.string(),
+  hardware_id: z.object({
+    smbios_uuid:   z.string().optional(),
+    serial_number: z.string().optional(),
+  }).optional(),
+  os:               z.any().optional(),
   device_type_hint: z.string().optional(),
-  agent_version: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -82,10 +86,9 @@ export async function POST(req: NextRequest) {
   const publicIp = getClientIp(req);
 
   // Detectar reinstalación por smbios_uuid dentro de la misma organización
+  const rawUuid = data.hardware_id?.smbios_uuid;
   const smbiosUuid =
-    data.smbios_uuid && !isPlaceholderUuid(data.smbios_uuid)
-      ? data.smbios_uuid
-      : null;
+    rawUuid && !isPlaceholderUuid(rawUuid) ? rawUuid : null;
 
   let existingDevice: typeof devices.$inferSelect | null = null;
   if (smbiosUuid) {
@@ -107,41 +110,44 @@ export async function POST(req: NextRequest) {
   const credentialHash = sha256hex(secret);
 
   let deviceId: string;
+  let deviceStatus: string;
 
   if (existingDevice) {
     // Reinstalación: reutilizar el mismo device_id, rotar credencial
     deviceId = existingDevice.id;
+    deviceStatus = existingDevice.clientId ? 'active' : 'pending_assignment';
     await db
       .update(devices)
       .set({
-        hostname: data.hostname,
-        status: 'active',
+        hostname:          data.hostname,
+        status:            deviceStatus,
         credentialHash,
         enrollmentTokenId: matchedToken.id,
-        clientId: matchedToken.clientId ?? existingDevice.clientId,
-        siteId: matchedToken.siteId ?? existingDevice.siteId,
-        agentVersion: data.agent_version ?? null,
+        clientId:          matchedToken.clientId ?? existingDevice.clientId,
+        siteId:            matchedToken.siteId   ?? existingDevice.siteId,
+        agentVersion:      data.agent_version ?? null,
         publicIp,
-        uninstalledAt: null,
+        uninstalledAt:     null,
       })
       .where(eq(devices.id, deviceId));
   } else {
     // Alta nueva
+    deviceStatus = matchedToken.clientId ? 'active' : 'pending_assignment';
     const inserted = await db
       .insert(devices)
       .values({
-        organizationId: orgId,
-        clientId: matchedToken.clientId,
-        siteId: matchedToken.siteId,
-        hostname: data.hostname,
-        status: matchedToken.clientId ? 'active' : 'pending_assignment',
-        deviceTypeHint: data.device_type_hint ?? null,
+        organizationId:     orgId,
+        clientId:           matchedToken.clientId,
+        siteId:             matchedToken.siteId,
+        hostname:           data.hostname,
+        status:             deviceStatus,
+        deviceTypeHint:     data.device_type_hint ?? null,
         hardwareSmbiousUuid: smbiosUuid,
-        hardwareSerial: data.serial_number ?? null,
+        hardwareSerial:     data.hardware_id?.serial_number ?? null,
         publicIp,
         credentialHash,
-        enrollmentTokenId: matchedToken.id,
-        agentVersion: data.agent_version ?? null,
+        enrollmentTokenId:  matchedToken.id,
+        agentVersion:       data.agent_version ?? null,
       })
       .returning({ id: devices.id });
 
@@ -155,9 +161,9 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({
-    device_id: deviceId,
+    device_id:     deviceId,
     device_secret: secret,
-    config: DEFAULT_CONFIG,
-    request_inventory: true,
+    status:        deviceStatus,
+    config:        DEFAULT_CONFIG,
   });
 }

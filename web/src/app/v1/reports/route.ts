@@ -51,19 +51,19 @@ async function processMetrics(deviceId: string, orgId: string, r: MetricsReport)
     .values({
       deviceId,
       organizationId: orgId,
-      periodStart: new Date(r.period_start),
-      periodEnd: new Date(r.period_end),
-      samples: r.samples,
-      cpuAvgPct: r.cpu.avg_pct,
-      cpuMaxPct: r.cpu.max_pct,
-      memoryUsedAvgPct: r.memory.used_avg_pct,
-      memoryUsedMaxPct: r.memory.used_max_pct,
-      ramTotalBytes: r.memory.total_bytes,
-      volumes: r.volumes ?? null,
-      services: r.services ?? null,
-      uptimeSecs: r.uptime_secs ?? null,
-      agentCpuPct: r.agent?.cpu_pct ?? null,
-      agentMemBytes: r.agent?.mem_bytes ?? null,
+      periodStart:        new Date(r.period_start),
+      periodEnd:          new Date(r.period_end),
+      samples:            r.samples,
+      cpuAvgPct:          r.cpu.avg_pct,
+      cpuMaxPct:          r.cpu.max_pct,
+      memoryUsedAvgPct:   r.memory.used_avg_pct,
+      memoryUsedMaxPct:   r.memory.used_max_pct,
+      ramTotalBytes:      r.memory.total_bytes,
+      volumes:            r.volumes ?? null,
+      services:           r.services ?? null,
+      uptimeSecs:         r.uptime_seconds ?? null,     // campo real del agente
+      agentCpuPct:        r.agent?.cpu_avg_pct ?? null, // campo real del agente
+      agentMemBytes:      r.agent?.mem_bytes ?? null,
     })
     .onConflictDoNothing();
 
@@ -71,20 +71,20 @@ async function processMetrics(deviceId: string, orgId: string, r: MetricsReport)
     .insert(deviceCurrentState)
     .values({
       deviceId,
-      organizationId: orgId,
-      cpuAvgPct: r.cpu.avg_pct,
-      cpuMaxPct: r.cpu.max_pct,
+      organizationId:   orgId,
+      cpuAvgPct:        r.cpu.avg_pct,
+      cpuMaxPct:        r.cpu.max_pct,
       memoryUsedAvgPct: r.memory.used_avg_pct,
       memoryUsedMaxPct: r.memory.used_max_pct,
-      ramTotalBytes: r.memory.total_bytes,
-      volumes: r.volumes ?? null,
-      services: r.services ?? null,
-      uptimeSecs: r.uptime_secs ?? null,
-      agentCpuPct: r.agent?.cpu_pct ?? null,
-      agentMemBytes: r.agent?.mem_bytes ?? null,
-      lastMetricsAt: new Date(r.collected_at),
-      lastReportAt: new Date(),
-      updatedAt: new Date(),
+      ramTotalBytes:    r.memory.total_bytes,
+      volumes:          r.volumes ?? null,
+      services:         r.services ?? null,
+      uptimeSecs:       r.uptime_seconds ?? null,
+      agentCpuPct:      r.agent?.cpu_avg_pct ?? null,
+      agentMemBytes:    r.agent?.mem_bytes ?? null,
+      lastMetricsAt:    new Date(r.period_end),
+      lastReportAt:     new Date(),
+      updatedAt:        new Date(),
     })
     .onConflictDoUpdate({
       target: deviceCurrentState.deviceId,
@@ -119,7 +119,7 @@ async function processStatus(
     .insert(deviceCurrentState)
     .values({
       deviceId,
-      organizationId: orgId,
+      organizationId:       orgId,
       lastBootAt:           r.last_boot_at ? new Date(r.last_boot_at) : null,
       rebootPending:        r.reboot_pending ?? null,
       rebootPendingReasons: r.reboot_pending_reasons ?? null,
@@ -158,9 +158,9 @@ async function processDaily(deviceId: string, orgId: string, r: DailyReport) {
   await db.insert(dailyReports).values({
     deviceId,
     organizationId: orgId,
-    collectedAt:   new Date(r.collected_at),
-    physicalDisks: r.physical_disks ?? null,
-    windowsUpdate: r.windows_update ?? null,
+    collectedAt:    new Date(r.collected_at),
+    physicalDisks:  r.physical_disks ?? null,
+    windowsUpdate:  r.windows_update ?? null,
   });
 
   await db
@@ -168,11 +168,11 @@ async function processDaily(deviceId: string, orgId: string, r: DailyReport) {
     .values({
       deviceId,
       organizationId: orgId,
-      physicalDisks: r.physical_disks ?? null,
-      windowsUpdate: r.windows_update ?? null,
-      lastDailyAt:   new Date(r.collected_at),
-      lastReportAt:  new Date(),
-      updatedAt:     new Date(),
+      physicalDisks:  r.physical_disks ?? null,
+      windowsUpdate:  r.windows_update ?? null,
+      lastDailyAt:    new Date(r.collected_at),
+      lastReportAt:   new Date(),
+      updatedAt:      new Date(),
     })
     .onConflictDoUpdate({
       target: deviceCurrentState.deviceId,
@@ -186,16 +186,22 @@ async function processDaily(deviceId: string, orgId: string, r: DailyReport) {
     });
 }
 
-async function processInventory(deviceId: string, orgId: string, r: InventoryReport) {
+// inventory no tiene collected_at propio; se usa sent_at del sobre
+async function processInventory(
+  deviceId: string,
+  orgId: string,
+  r: InventoryReport,
+  sentAt: string,
+) {
   await db.insert(inventorySnapshots).values({
     deviceId,
     organizationId:   orgId,
-    collectedAt:      new Date(r.collected_at),
+    collectedAt:      new Date(sentAt),
     hash:             r.hash,
-    systemInfo:       r.system_info ?? null,
-    cpuInfo:          r.cpu_info ?? null,
+    systemInfo:       r.system ?? null,       // campo real: "system"
+    cpuInfo:          r.cpu ?? null,           // campo real: "cpu"
     memoryTotalBytes: r.memory_total_bytes ?? null,
-    osInfo:           r.os_info ?? null,
+    osInfo:           r.os ?? null,            // campo real: "os"
     physicalDisks:    r.physical_disks ?? null,
   });
 
@@ -204,9 +210,9 @@ async function processInventory(deviceId: string, orgId: string, r: InventoryRep
     .values({
       deviceId,
       organizationId:  orgId,
-      osInfo:          r.os_info ?? null,
+      osInfo:          r.os ?? null,
       inventoryHash:   r.hash,
-      lastInventoryAt: new Date(r.collected_at),
+      lastInventoryAt: new Date(sentAt),
       lastReportAt:    new Date(),
       updatedAt:       new Date(),
     })
@@ -266,7 +272,10 @@ export async function POST(req: NextRequest) {
 
   const parsed = reportEnvelopeSchema.safeParse(rawBody);
   if (!parsed.success) {
-    return NextResponse.json({ error: 'esquema inválido', details: parsed.error.issues }, { status: 422 });
+    return NextResponse.json(
+      { error: 'esquema inválido', details: parsed.error.issues },
+      { status: 422 },
+    );
   }
 
   const envelope = parsed.data;
@@ -274,7 +283,10 @@ export async function POST(req: NextRequest) {
 
   // Leer estado actual para calcular request_inventory al final
   const stateRows = await db
-    .select({ lastInventoryAt: deviceCurrentState.lastInventoryAt, inventoryHash: deviceCurrentState.inventoryHash })
+    .select({
+      lastInventoryAt: deviceCurrentState.lastInventoryAt,
+      inventoryHash:   deviceCurrentState.inventoryHash,
+    })
     .from(deviceCurrentState)
     .where(eq(deviceCurrentState.deviceId, device.id))
     .limit(1);
@@ -305,7 +317,7 @@ export async function POST(req: NextRequest) {
         break;
 
       case 'inventory':
-        await processInventory(device.id, device.organizationId, report);
+        await processInventory(device.id, device.organizationId, report, envelope.sent_at);
         inventoryProcessed = true;
         break;
 
@@ -322,13 +334,13 @@ export async function POST(req: NextRequest) {
   await db
     .update(devices)
     .set({
-      publicIp: publicIp,
+      publicIp:     publicIp,
       agentVersion: envelope.agent_version ?? null,
     })
     .where(eq(devices.id, device.id));
 
   return NextResponse.json({
-    ok: true,
+    ok:               true,
     reports_received: envelope.reports.length,
     request_inventory: requestInventory,
   });
