@@ -239,3 +239,74 @@ func collectSelf() report.AgentSelf {
 func roundPct(v float64) float64 {
 	return float64(int(v*10+0.5)) / 10
 }
+
+// MetricsSample es una única muestra instantánea de CPU y RAM.
+type MetricsSample struct {
+	CPUpct float64
+	MemPct float64
+	At     time.Time
+}
+
+// TakeSample toma una muestra de CPU (ventana de 500 ms) y RAM.
+// Bloquea aproximadamente 500 ms. No lanza procesos externos.
+func TakeSample() MetricsSample {
+	pcts, _ := cpu.Percent(500*time.Millisecond, false)
+	cpuPct := 0.0
+	if len(pcts) > 0 {
+		cpuPct = pcts[0]
+	}
+	memPct := 0.0
+	if vm, err := mem.VirtualMemory(); err == nil && vm.Total > 0 {
+		memPct = float64(vm.Used) / float64(vm.Total) * 100
+	}
+	return MetricsSample{
+		CPUpct: roundPct(cpuPct),
+		MemPct: roundPct(memPct),
+		At:     time.Now().UTC(),
+	}
+}
+
+// AggregateSamples agrega un slice de muestras y devuelve un informe de métricas.
+// Recolecta volúmenes, servicios, uptime y autoconsumo en el momento de la llamada.
+func AggregateSamples(samples []MetricsSample, start, end time.Time, criticalServices []string) report.Metrics {
+	var cpuSum, cpuMax, memSum, memMax float64
+	for _, s := range samples {
+		cpuSum += s.CPUpct
+		if s.CPUpct > cpuMax {
+			cpuMax = s.CPUpct
+		}
+		memSum += s.MemPct
+		if s.MemPct > memMax {
+			memMax = s.MemPct
+		}
+	}
+	n := float64(len(samples))
+	if n == 0 {
+		n = 1
+	}
+
+	var memTotal uint64
+	if vm, err := mem.VirtualMemory(); err == nil {
+		memTotal = vm.Total
+	}
+
+	return report.Metrics{
+		Type:        "metrics",
+		PeriodStart: start.Format(time.RFC3339),
+		PeriodEnd:   end.Format(time.RFC3339),
+		Samples:     len(samples),
+		CPU: report.MetricsCPU{
+			AvgPct: roundPct(cpuSum / n),
+			MaxPct: roundPct(cpuMax),
+		},
+		Memory: report.MetricsMemory{
+			TotalBytes: memTotal,
+			UsedAvgPct: roundPct(memSum / n),
+			UsedMaxPct: roundPct(memMax),
+		},
+		Volumes:    collectVolumes(),
+		Services:   collectServices(criticalServices, nil),
+		UptimeSecs: collectUptime(),
+		Agent:      collectSelf(),
+	}
+}

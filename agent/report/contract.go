@@ -166,9 +166,88 @@ type OSInfo struct {
 }
 
 type PhysicalDisk struct {
-	Model      string `json:"model,omitempty"`
-	Serial     string `json:"serial,omitempty"`
-	Media      string `json:"media,omitempty"`
-	Bus        string `json:"bus,omitempty"`
-	SizeBytes  uint64 `json:"size_bytes"`
+	Model     string `json:"model,omitempty"`
+	Serial    string `json:"serial,omitempty"`
+	Media     string `json:"media,omitempty"`
+	Bus       string `json:"bus,omitempty"`
+	SizeBytes uint64 `json:"size_bytes"`
+}
+
+// --- event ---
+
+// Event notifica un evento del ciclo de vida del agente.
+type Event struct {
+	Type       string         `json:"type"`
+	Event      string         `json:"event"`
+	OccurredAt string         `json:"occurred_at"`
+	Data       map[string]any `json:"data,omitempty"`
+}
+
+func (Event) reportType() {}
+
+// --- tipos de petición y respuesta de la API ---
+
+// EnrollRequest es el cuerpo de POST /v1/enroll.
+type EnrollRequest struct {
+	SchemaVersion   int        `json:"schema_version"`
+	EnrollmentToken string     `json:"enrollment_token"`
+	AgentVersion    string     `json:"agent_version"`
+	HardwareID      HardwareID `json:"hardware_id"`
+	Hostname        string     `json:"hostname"`
+	OS              EnrollOS   `json:"os"`
+	DeviceTypeHint  string     `json:"device_type_hint,omitempty"`
+}
+
+// HardwareID identifica el hardware del equipo en el momento del alta.
+type HardwareID struct {
+	SMBIOSuuid   string `json:"smbios_uuid,omitempty"`
+	SerialNumber string `json:"serial_number,omitempty"`
+}
+
+// EnrollOS describe el SO en el momento del alta.
+type EnrollOS struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Build   string `json:"build"`
+	Arch    string `json:"arch"`
+}
+
+// EnrollResponse es la respuesta de POST /v1/enroll.
+type EnrollResponse struct {
+	DeviceID     string         `json:"device_id"`
+	DeviceSecret string         `json:"device_secret"`
+	Status       string         `json:"status"`
+	Config       ConfigResponse `json:"config"`
+}
+
+// ReportsResponse es la respuesta de POST /v1/reports.
+type ReportsResponse struct {
+	Accepted         int  `json:"accepted"`
+	ConfigVersion    int  `json:"config_version"`
+	RequestInventory bool `json:"request_inventory"`
+}
+
+// ConfigResponse es la respuesta de GET /v1/config.
+type ConfigResponse struct {
+	ConfigVersion       int             `json:"config_version"`
+	Intervals           ConfigIntervals `json:"intervals"`
+	JitterS             int             `json:"jitter_s"`
+	MeteredIntervalMult int             `json:"metered_interval_multiplier"`
+	CriticalServices    []string        `json:"critical_services"`
+	SelfLimits          SelfLimits      `json:"self_limits"`
+	OfflineCacheMaxMB   int             `json:"offline_cache_max_mb"`
+}
+
+// ConfigIntervals contiene los intervalos de envío configurados por el servidor.
+type ConfigIntervals struct {
+	SampleS  int `json:"sample_s"`
+	MetricsS int `json:"metrics_s"`
+	StatusS  int `json:"status_s"`
+	DailyS   int `json:"daily_s"`
+}
+
+// SelfLimits son los límites de consumo del propio agente.
+type SelfLimits struct {
+	CPUAvgPct float64 `json:"cpu_avg_pct"`
+	MemMB     int     `json:"mem_mb"`
 }
