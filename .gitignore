@@ -17,3 +17,6 @@ web/.env*.local
 .DS_Store
 Thumbs.db
 *.log
+
+agent/salida*.json
+web/next-env.d.ts
