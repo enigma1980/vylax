@@ -59,6 +59,21 @@ func DeleteCacheFile(path string) error {
 	return os.Remove(path)
 }
 
+// SaveInvalidDirect serializa env como JSON y lo guarda directamente en cache\invalid\.
+// Se usa cuando el servidor rechaza un envío en directo con 422: el sobre no mejorará
+// reintentando, así que se archiva en invalid/ sin pasar por la caché normal.
+func SaveInvalidDirect(env any) error {
+	if err := ensureDir(InvalidCacheDir); err != nil {
+		return fmt.Errorf("crear invalid: %w", err)
+	}
+	data, err := json.Marshal(env)
+	if err != nil {
+		return err
+	}
+	name := fmt.Sprintf("%d.json", time.Now().UnixNano())
+	return os.WriteFile(filepath.Join(InvalidCacheDir, name), data, 0640)
+}
+
 // MoveToInvalid mueve path a cache\invalid\ para que no bloquee el vaciado.
 // Se usa cuando el servidor rechaza el sobre con 422.
 func MoveToInvalid(path string) error {

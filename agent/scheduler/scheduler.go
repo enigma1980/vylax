@@ -334,6 +334,14 @@ func (s *Scheduler) doSend(ctx context.Context, reports []report.Report) *report
 		s.blockedUntil = time.Now().Add(outcome.RetryAfter)
 		s.saveToCache(env)
 
+	case client.Send422:
+		// 422 no es transitorio: el sobre no mejorará reintentando.
+		// Se mueve directamente a cache\invalid\ para no reintentar.
+		s.log.Printf("informe rechazado como inválido (422): %v", err)
+		if err2 := client.SaveInvalidDirect(env); err2 != nil {
+			s.log.Printf("error al guardar en invalid/: %v", err2)
+		}
+
 	default: // SendRetry: 5xx o sin red
 		s.log.Printf("error temporal (%v); guardando en caché", err)
 		s.saveToCache(env)

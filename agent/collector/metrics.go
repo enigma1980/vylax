@@ -10,7 +10,6 @@ import (
 
 	"github.com/enigma1980/vylax/agent/report"
 	"github.com/shirou/gopsutil/v4/cpu"
-	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/host"
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/process"
@@ -112,77 +111,89 @@ func sampleMemory(interval time.Duration, count int) (avg, max float64, total ui
 	return
 }
 
+// collectVolumes enumera los volúmenes físicos del equipo usando GetLogicalDrives
+// y GetVolumeInformation directamente, sin pasar por gopsutil. Esto evita problemas
+// cuando el agente corre como LocalSystem en la sesión 0 (servicio de Windows), donde
+// gopsutil/disk.Partitions puede fallar silenciosamente por diferencias en el espacio
+// de nombres de dispositivos DOS entre sesiones.
 func collectVolumes() []report.Volume {
-	parts, err := disk.Partitions(false)
-	if err != nil {
-		log.Printf("aviso metrics: particiones: %v", err)
-		return nil
+	out := make([]report.Volume, 0)
+
+	r, _, err := procGetLogicalDrives.Call()
+	if r == 0 {
+		log.Printf("aviso metrics: GetLogicalDrives: %v", err)
+		return out
 	}
-	out := make([]report.Volume, 0, len(parts))
-	for _, p := range parts {
-		if skipVolume(p.Mountpoint, p.Fstype) {
+	mask := uint32(r)
+
+	for i := 0; i < 26; i++ {
+		if mask&(1<<uint(i)) == 0 {
 			continue
 		}
-		mp := p.Mountpoint
-		if len(mp) > 0 && mp[len(mp)-1] != '\\' {
-			mp += `\`
-		}
-		rootPtr, err := windows.UTF16PtrFromString(mp)
+		mountpoint := string(rune('A'+i)) + `:\`
+
+		rootPtr, err := windows.UTF16PtrFromString(mountpoint)
 		if err != nil {
 			continue
 		}
+
+		// Solo FIXED y REMOVABLE; CD/DVD, red, ramdisk y desconocidos se descartan.
+		dtype := windows.GetDriveType(rootPtr)
+		switch dtype {
+		case windows.DRIVE_FIXED, windows.DRIVE_REMOVABLE:
+			// continuar
+		default:
+			continue
+		}
+
+		// Tipo de filesystem y etiqueta en una sola llamada.
+		var volName [windows.MAX_PATH + 1]uint16
+		var fsTypeBuf [32]uint16
+		if err := windows.GetVolumeInformation(
+			rootPtr,
+			&volName[0], uint32(len(volName)),
+			nil, nil, nil,
+			&fsTypeBuf[0], uint32(len(fsTypeBuf)),
+		); err != nil {
+			// Extraíble sin medio u otro error temporal → silencio.
+			continue
+		}
+
+		fstype := windows.UTF16ToString(fsTypeBuf[:])
+		if fstype == "" {
+			continue
+		}
+
+		// Excluir unidades virtuales / nube (Google Drive File Stream, OneDrive, etc.)
+		// que montan como DRIVE_FIXED pero no tienen dispositivo de almacenamiento físico.
+		if !hasPhysicalDevice(mountpoint) {
+			continue
+		}
+
 		// Usamos TotalNumberOfFreeBytes (3er parámetro), no FreeBytesAvailableToCaller,
 		// para que el valor sea independiente de las cuotas de disco del usuario.
 		var freeBytesAvailable, totalBytes, totalFreeBytes uint64
 		if err := windows.GetDiskFreeSpaceEx(rootPtr, &freeBytesAvailable, &totalBytes, &totalFreeBytes); err != nil {
-			// Extraíble sin medio, unidad fantasma u otro error temporal → silencio.
 			continue
 		}
 		if totalBytes == 0 {
 			continue
 		}
-		label := volumeLabel(p.Mountpoint)
+
 		out = append(out, report.Volume{
-			Mount:      p.Mountpoint,
-			Label:      label,
-			FS:         p.Fstype,
+			Mount:      mountpoint,
+			Label:      windows.UTF16ToString(volName[:]),
+			FS:         fstype,
 			TotalBytes: totalBytes,
 			FreeBytes:  totalFreeBytes,
 		})
 	}
-	return out
-}
 
-// skipVolume decide si una unidad debe excluirse del informe.
-func skipVolume(mountpoint, fstype string) bool {
-	mp := mountpoint
-	if len(mp) > 0 && mp[len(mp)-1] != '\\' {
-		mp += `\`
+	if len(out) == 0 {
+		log.Printf("aviso metrics: ningún volumen encontrado (máscara GetLogicalDrives=0x%08x)", mask)
 	}
-	root, err := windows.UTF16PtrFromString(mp)
-	if err != nil {
-		return true
-	}
-	dtype := windows.GetDriveType(root)
-	switch dtype {
-	case windows.DRIVE_REMOTE,  // red o virtual mapeada
-		windows.DRIVE_CDROM,    // CD/DVD
-		windows.DRIVE_RAMDISK:  // ramdisk
-		return true
-	case windows.DRIVE_UNKNOWN, windows.DRIVE_NO_ROOT_DIR:
-		return true
-	}
-	if fstype == "" {
-		return true
-	}
-	// Para unidades FIXED y REMOVABLE comprobamos que haya un dispositivo físico
-	// real detrás (IOCTL_STORAGE_GET_DEVICE_NUMBER). Las unidades virtuales en la
-	// nube (Google Drive File Stream, OneDrive, etc.) montan como DRIVE_FIXED pero
-	// no tienen número de dispositivo de almacenamiento y fallan este IOCTL.
-	if dtype == windows.DRIVE_FIXED || dtype == windows.DRIVE_REMOVABLE {
-		return !hasPhysicalDevice(mountpoint)
-	}
-	return false
+
+	return out
 }
 
 // hasPhysicalDevice usa QueryDosDevice para obtener el nombre NT del volumen.

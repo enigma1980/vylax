@@ -14,6 +14,7 @@ var (
 	procQueryDosDeviceW      = dllKernel32.NewProc("QueryDosDeviceW")
 	procGetFinalPathByHandle = dllKernel32.NewProc("GetFinalPathNameByHandleW")
 	procGetTickCount64       = dllKernel32.NewProc("GetTickCount64")
+	procGetLogicalDrives     = dllKernel32.NewProc("GetLogicalDrives")
 )
 
 // WindowsUptime devuelve el tiempo transcurrido desde el arranque del sistema.
