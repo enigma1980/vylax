@@ -298,12 +298,19 @@ func (s *Scheduler) drainCache(ctx context.Context) {
 			continue
 		}
 		outcome, _, err := s.hc.SendCachedFile(raw)
-		if outcome.Result == client.SendOK {
+		switch outcome.Result {
+		case client.SendOK:
 			_ = client.DeleteCacheFile(f)
 			drained++
-		} else {
+		case client.Send422:
+			s.log.Printf("sobre inválido %s (422); moviendo a invalid/", f)
+			if mvErr := client.MoveToInvalid(f); mvErr != nil {
+				s.log.Printf("error al mover a invalid: %v", mvErr)
+				_ = client.DeleteCacheFile(f)
+			}
+		default:
 			s.log.Printf("no se pudo vaciar caché (%v); reintentará en el siguiente ciclo", err)
-			break
+			return
 		}
 	}
 	if drained > 0 {

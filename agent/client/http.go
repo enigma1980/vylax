@@ -63,6 +63,7 @@ const (
 	Send401                     // credencial revocada — esperar 6 h
 	Send410                     // equipo eliminado — parar definitivamente
 	Send429                     // tasa limitada — respetar Retry-After
+	Send422                     // sobre inválido — mover a cache\invalid\
 )
 
 // SendOutcome combina el resultado con información adicional (p.ej. Retry-After).
@@ -93,13 +94,26 @@ func (c *Client) SendReports(env *report.Envelope) (SendOutcome, *report.Reports
 	return parseReportsResponse(resp)
 }
 
-// SendCachedFile recomprime y envía un envelope guardado en caché (JSON sin comprimir).
+// SendCachedFile gzipea el JSON guardado en caché y lo envía tal cual, sin
+// deserializarlo. Así se evita el problema de desserializar Report (interfaz).
 func (c *Client) SendCachedFile(raw []byte) (SendOutcome, *report.ReportsResponse, error) {
-	var env report.Envelope
-	if err := json.Unmarshal(raw, &env); err != nil {
-		return SendOutcome{Result: SendRetry}, nil, fmt.Errorf("parsear caché: %w", err)
+	data, err := gzipBytes(raw)
+	if err != nil {
+		return SendOutcome{Result: SendRetry}, nil, fmt.Errorf("comprimir caché: %w", err)
 	}
-	return c.SendReports(&env)
+	req, err := http.NewRequest(http.MethodPost, c.serverURL+"/v1/reports", bytes.NewReader(data))
+	if err != nil {
+		return SendOutcome{Result: SendRetry}, nil, err
+	}
+	c.setAuthHeaders(req)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Encoding", "gzip")
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return SendOutcome{Result: SendRetry}, nil, fmt.Errorf("sin conexión: %w", err)
+	}
+	defer resp.Body.Close()
+	return parseReportsResponse(resp)
 }
 
 // GetConfig hace GET /v1/config y devuelve la configuración del agente.
@@ -172,6 +186,9 @@ func parseReportsResponse(resp *http.Response) (SendOutcome, *report.ReportsResp
 		return SendOutcome{Result: Send401}, nil, fmt.Errorf("credencial revocada (401)")
 	case resp.StatusCode == 410:
 		return SendOutcome{Result: Send410}, nil, fmt.Errorf("equipo eliminado en el panel (410)")
+	case resp.StatusCode == 422:
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return SendOutcome{Result: Send422}, nil, fmt.Errorf("sobre inválido (422): %s", b)
 	case resp.StatusCode == 429:
 		d := parseRetryAfter(resp.Header.Get("Retry-After"))
 		return SendOutcome{Result: Send429, RetryAfter: d}, nil, fmt.Errorf("tasa limitada (429); esperar %s", d)
@@ -182,9 +199,17 @@ func parseReportsResponse(resp *http.Response) (SendOutcome, *report.ReportsResp
 }
 
 func marshalGzip(v any) ([]byte, error) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	return gzipBytes(data)
+}
+
+func gzipBytes(data []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
-	if err := json.NewEncoder(gz).Encode(v); err != nil {
+	if _, err := gz.Write(data); err != nil {
 		return nil, err
 	}
 	if err := gz.Close(); err != nil {

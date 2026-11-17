@@ -15,11 +15,12 @@ import (
 
 // Rutas del directorio de datos del agente.
 const (
-	DataDir    = `C:\ProgramData\Vylax`
-	ConfigFile = `C:\ProgramData\Vylax\config.json`
-	CredFile   = `C:\ProgramData\Vylax\credential.bin`
-	CacheDir   = `C:\ProgramData\Vylax\cache`
-	LogFile    = `C:\ProgramData\Vylax\vylax-agent.log`
+	DataDir         = `C:\ProgramData\Vylax`
+	ConfigFile      = `C:\ProgramData\Vylax\config.json`
+	CredFile        = `C:\ProgramData\Vylax\credential.bin`
+	CacheDir        = `C:\ProgramData\Vylax\cache`
+	InvalidCacheDir = `C:\ProgramData\Vylax\cache\invalid`
+	LogFile         = `C:\ProgramData\Vylax\vylax-agent.log`
 )
 
 // LocalConfig almacena la configuración local persistente del agente.

@@ -59,6 +59,16 @@ func DeleteCacheFile(path string) error {
 	return os.Remove(path)
 }
 
+// MoveToInvalid mueve path a cache\invalid\ para que no bloquee el vaciado.
+// Se usa cuando el servidor rechaza el sobre con 422.
+func MoveToInvalid(path string) error {
+	if err := ensureDir(InvalidCacheDir); err != nil {
+		return fmt.Errorf("crear invalid: %w", err)
+	}
+	dest := filepath.Join(InvalidCacheDir, filepath.Base(path))
+	return os.Rename(path, dest)
+}
+
 // evictUntilBelow borra los archivos de caché más antiguos hasta que el total
 // de bytes ocupados quede por debajo de targetBytes.
 func evictUntilBelow(targetBytes int64) {
