@@ -69,10 +69,14 @@ type dataBlob struct {
 func SetupDataDir() error {
 	for _, dir := range []string{DataDir, CacheDir} {
 		if err := os.MkdirAll(dir, 0750); err != nil {
-			return fmt.Errorf("crear %s: %w", dir, err)
+			// En Windows, MkdirAll puede devolver ERROR_ALREADY_EXISTS incluso cuando
+			// el directorio ya existe. Verificamos que realmente sea una carpeta.
+			if fi, statErr := os.Stat(dir); statErr != nil || !fi.IsDir() {
+				return fmt.Errorf("crear %s: %w", dir, err)
+			}
 		}
 	}
-	// Aplicar también si el directorio ya existía con permisos heredados.
+	// Aplicar ACL tanto si la carpeta es nueva como si ya existía.
 	return applyRestrictiveACL(DataDir)
 }
 
