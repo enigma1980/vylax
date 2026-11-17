@@ -53,6 +53,11 @@ func printUsage() {
 // ---- subcomando: run ----
 
 func cmdRun(args []string) {
+	if !client.IsElevated() {
+		fmt.Fprintln(os.Stderr, "Vylax Agent necesita ejecutarse como administrador.")
+		os.Exit(1)
+	}
+
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	fast := fs.Bool("fast", false, "intervalos cortos (1 min métricas/status, 5 min daily)")
 	_ = fs.Parse(args)
@@ -113,6 +118,11 @@ func cmdRun(args []string) {
 // ---- subcomando: enroll ----
 
 func cmdEnroll(args []string) {
+	if !client.IsElevated() {
+		fmt.Fprintln(os.Stderr, "Vylax Agent necesita ejecutarse como administrador.")
+		os.Exit(1)
+	}
+
 	fs := flag.NewFlagSet("enroll", flag.ExitOnError)
 	server := fs.String("server", "", "URL base del servidor (ej: https://vylax.example.com)")
 	token := fs.String("token", "", "token de alta (proporcionado en el panel)")

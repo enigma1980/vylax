@@ -61,6 +61,18 @@ type dataBlob struct {
 	pbData *byte
 }
 
+// --- Comprobación de privilegios ---
+
+// IsElevated devuelve true si el proceso actual tiene token elevado (Administrador).
+func IsElevated() bool {
+	var token windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token); err != nil {
+		return false
+	}
+	defer token.Close()
+	return token.IsElevated()
+}
+
 // --- Gestión del directorio de datos ---
 
 // SetupDataDir crea C:\ProgramData\Vylax con ACL restrictiva:
