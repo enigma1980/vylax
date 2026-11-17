@@ -15,7 +15,7 @@ import (
 // SaveToCache serializa env como JSON y lo guarda en la carpeta de caché.
 // Si el total supera maxMB elimina los archivos más antiguos para hacer hueco.
 func SaveToCache(env any, maxMB int) error {
-	if err := os.MkdirAll(CacheDir, 0750); err != nil {
+	if err := ensureDir(CacheDir); err != nil {
 		return fmt.Errorf("crear caché: %w", err)
 	}
 	data, err := json.Marshal(env)
