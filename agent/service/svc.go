@@ -37,6 +37,9 @@ func (s *vylaxSvc) Execute(args []string, r <-chan svc.ChangeRequest, status cha
 
 	done := make(chan struct{})
 	sched := scheduler.New(s.hc, s.cfg, s.log, s.agentVer, false)
+	// El handler del servicio (Execute) es el único que decide qué evento de
+	// parada se envía. El bucle Run no debe enviar nada al cancelar el contexto.
+	sched.DisableShutdownEvent()
 	go func() {
 		defer close(done)
 		sched.Run(ctx)

@@ -54,10 +54,21 @@ type Scheduler struct {
 	stopped      bool      // 410: parar definitivamente
 
 	// condiciones para tareas pesadas
-	onBattery    bool      // actualizado en cada doSendStatus
-	metered      bool      // actualizado en cada doSendStatus
-	heavyPending bool      // la tarea pesada está pendiente (aplazada por CPU/batería)
+	onBattery     bool      // actualizado en cada doSendStatus
+	metered       bool      // actualizado en cada doSendStatus
+	heavyPending  bool      // la tarea pesada está pendiente (aplazada por CPU/batería)
 	heavyDeadline time.Time // plazo máximo desde que tocó la tarea (6 h)
+
+	// shutdownEventDisabled indica que los eventos de ciclo de vida de parada
+	// los gestiona el handler del servicio, no el bucle Run.
+	shutdownEventDisabled bool
+}
+
+// DisableShutdownEvent indica al scheduler que no envíe el evento de parada
+// cuando el contexto se cancela. Debe llamarse en modo servicio, donde el
+// handler del servicio es el único responsable de los eventos de ciclo de vida.
+func (s *Scheduler) DisableShutdownEvent() {
+	s.shutdownEventDisabled = true
 }
 
 // New crea un Scheduler.
@@ -94,7 +105,9 @@ func (s *Scheduler) Run(ctx context.Context) {
 		s.log.Printf("jitter inicial: %s", jitter)
 		select {
 		case <-ctx.Done():
-			s.sendEvent(ctx, "shutdown", nil)
+			if !s.shutdownEventDisabled {
+				s.sendEvent(ctx, "shutdown", nil)
+			}
 			return
 		case <-time.After(jitter):
 		}
@@ -144,7 +157,11 @@ func (s *Scheduler) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			s.sendEvent(ctx, "shutdown", nil)
+			// En modo servicio, el handler Execute gestiona el evento de parada.
+			// En modo run (Ctrl+C) sí lo enviamos.
+			if !s.shutdownEventDisabled {
+				s.sendEvent(ctx, "shutdown", nil)
+			}
 			return
 
 		case <-warmupTimer.C:
