@@ -52,6 +52,12 @@ type Scheduler struct {
 	// estado de envío
 	blockedUntil time.Time // 401 (6 h) o 429 (Retry-After)
 	stopped      bool      // 410: parar definitivamente
+
+	// condiciones para tareas pesadas
+	onBattery    bool      // actualizado en cada doSendStatus
+	metered      bool      // actualizado en cada doSendStatus
+	heavyPending bool      // la tarea pesada está pendiente (aplazada por CPU/batería)
+	heavyDeadline time.Time // plazo máximo desde que tocó la tarea (6 h)
 }
 
 // New crea un Scheduler.
@@ -81,12 +87,6 @@ func (s *Scheduler) Run(ctx context.Context) {
 
 	intervals := s.effectiveIntervals()
 	sampleD := time.Duration(intervals.SampleS) * time.Second
-	statusD := time.Duration(intervals.StatusS) * time.Second
-	dailyD := time.Duration(intervals.DailyS) * time.Second
-	samplesPerBatch := intervals.MetricsS / intervals.SampleS
-	if samplesPerBatch < 1 {
-		samplesPerBatch = 1
-	}
 
 	// Jitter inicial (omitido en --fast)
 	if !s.fast && s.srvCfg.JitterS > 0 {
@@ -103,7 +103,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 	// Evento de arranque
 	s.sendEvent(ctx, "started", nil)
 
-	// Status inmediato al arrancar
+	// Status inmediato al arrancar (también actualiza onBattery y metered)
 	s.log.Printf("enviando status inicial...")
 	s.doSendStatus(ctx)
 	s.lastStatusSent = time.Now()
@@ -111,21 +111,35 @@ func (s *Scheduler) Run(ctx context.Context) {
 	// Drenar caché de sesión anterior
 	s.drainCache(ctx)
 
-	// Timer de warmup: 10 min (1 min en --fast) antes de tareas pesadas
-	warmup := 10 * time.Minute
+	// Warmup basado en el uptime de Windows (no del agente).
+	// Si Windows lleva > 10 min encendido, warmupDelay = 0 (arranca tareas pesadas de inmediato).
+	warmupTarget := 10 * time.Minute
 	if s.fast {
-		warmup = 1 * time.Minute
+		warmupTarget = 1 * time.Minute
 	}
-	warmupTimer := time.NewTimer(warmup)
+	winUptime := collector.WindowsUptime()
+	warmupDelay := warmupTarget - winUptime
+	if warmupDelay < 0 {
+		warmupDelay = 0
+	}
+	s.log.Printf("agente activo (sample=%ds metrics=%ds status=%ds daily=%ds uptime=%s warmupDelay=%s fast=%v)",
+		intervals.SampleS, intervals.MetricsS, intervals.StatusS, intervals.DailyS,
+		winUptime.Round(time.Second), warmupDelay.Round(time.Second), s.fast)
+
+	warmupTimer := time.NewTimer(warmupDelay)
 	defer warmupTimer.Stop()
-	warmupDone := false
+	warmupDone := warmupDelay == 0
 
 	ticker := time.NewTicker(sampleD)
 	defer ticker.Stop()
 	s.periodStart = time.Now().UTC()
 
-	s.log.Printf("agente activo (sample=%ds metrics=%ds status=%ds daily=%ds warmup=%s fast=%v)",
-		intervals.SampleS, intervals.MetricsS, intervals.StatusS, intervals.DailyS, warmup, s.fast)
+	// Si warmupDelay==0 el timer ya expiró antes de entrar al loop;
+	// ejecutar la tarea pesada inicial directamente.
+	if warmupDone {
+		s.log.Printf("warmup completado (uptime=%s); programando tarea pesada...", winUptime.Round(time.Second))
+		s.scheduleHeavy(ctx)
+	}
 
 	for {
 		select {
@@ -134,9 +148,11 @@ func (s *Scheduler) Run(ctx context.Context) {
 			return
 
 		case <-warmupTimer.C:
-			warmupDone = true
-			s.log.Printf("warmup completado; recogiendo inventario y daily...")
-			s.doHeavyCollection(ctx)
+			if !warmupDone {
+				warmupDone = true
+				s.log.Printf("warmup completado; programando tarea pesada...")
+				s.scheduleHeavy(ctx)
+			}
 
 		case now := <-ticker.C:
 			if s.stopped {
@@ -152,6 +168,15 @@ func (s *Scheduler) Run(ctx context.Context) {
 				continue
 			}
 
+			// Recalcular intervalos cada tick (puede cambiar si metered cambia)
+			curr := s.effectiveIntervals()
+			samplesPerBatch := curr.MetricsS / curr.SampleS
+			if samplesPerBatch < 1 {
+				samplesPerBatch = 1
+			}
+			statusD := time.Duration(curr.StatusS) * time.Second
+			dailyD := time.Duration(curr.DailyS) * time.Second
+
 			// Métricas: ¿suficientes muestras acumuladas?
 			if len(s.samples) >= samplesPerBatch {
 				mr := collector.AggregateSamples(s.samples, s.periodStart, now.UTC(), s.srvCfg.CriticalServices)
@@ -166,16 +191,58 @@ func (s *Scheduler) Run(ctx context.Context) {
 				s.lastStatusSent = time.Now()
 			}
 
-			// Daily (solo tras warmup)
-			if warmupDone && time.Since(s.lastDailySent) >= dailyD {
-				s.doHeavyCollection(ctx)
+			// Tarea pesada (solo tras warmup)
+			if warmupDone {
+				// ¿Toca hacer la tarea y aún no está pendiente?
+				if !s.heavyPending && time.Since(s.lastDailySent) >= dailyD {
+					s.scheduleHeavy(ctx)
+				}
+				// ¿Está pendiente? Intentar si las condiciones se cumplen o si se pasó el plazo.
+				if s.heavyPending {
+					forceDue := !s.heavyDeadline.IsZero() && time.Now().After(s.heavyDeadline)
+					if forceDue {
+						s.log.Printf("plazo de tarea pesada alcanzado (6 h), ejecutando igualmente")
+						s.doHeavyCollection(ctx)
+					} else if s.heavyReady() {
+						s.doHeavyCollection(ctx)
+					}
+				}
 			}
 		}
 	}
 }
 
+// scheduleHeavy marca la tarea pesada como pendiente y establece el plazo de 6 h.
+// Si las condiciones ya son buenas, la ejecuta de inmediato.
+func (s *Scheduler) scheduleHeavy(ctx context.Context) {
+	s.heavyPending = true
+	s.heavyDeadline = time.Now().Add(6 * time.Hour)
+	if s.heavyReady() {
+		s.doHeavyCollection(ctx)
+	} else {
+		s.log.Printf("tarea pesada aplazada (CPU>30%% o batería); plazo en 6 h")
+	}
+}
+
+// heavyReady devuelve true si las condiciones permiten ejecutar la tarea pesada:
+// no en batería y CPU < 30%.
+func (s *Scheduler) heavyReady() bool {
+	if s.onBattery {
+		return false
+	}
+	pct := collector.QuickCPUPercent()
+	if pct >= 30.0 {
+		s.log.Printf("tarea pesada: CPU %.1f%% (>30%%), aplazando", pct)
+		return false
+	}
+	return true
+}
+
 // doHeavyCollection recoge inventario y daily, los envía y gestiona request_inventory.
 func (s *Scheduler) doHeavyCollection(ctx context.Context) {
+	s.heavyPending = false
+	s.heavyDeadline = time.Time{}
+
 	inv, invHash := collector.CollectInventory()
 	s.invHash = invHash
 	invCopy := inv
@@ -191,9 +258,11 @@ func (s *Scheduler) doHeavyCollection(ctx context.Context) {
 	}
 }
 
-// doSendStatus recoge y envía un informe de estado.
+// doSendStatus recoge y envía un informe de estado; actualiza onBattery y metered.
 func (s *Scheduler) doSendStatus(ctx context.Context) {
 	status := collector.CollectStatus(s.invHash)
+	s.onBattery = status.OnBattery
+	s.metered = status.MeteredConnection
 	rsp := s.doSend(ctx, []report.Report{status})
 	if rsp != nil && rsp.RequestInventory && s.invData != nil {
 		s.log.Printf("servidor solicita inventario completo, enviando...")
@@ -339,6 +408,8 @@ func (s *Scheduler) applyConfig(cfg *report.ConfigResponse) {
 		cfg.Intervals.StatusS, cfg.Intervals.DailyS)
 }
 
+// effectiveIntervals devuelve los intervalos activos, ajustados si la conexión es medida.
+// En conexión medida, se multiplican MetricsS y StatusS (no el daily ni las muestras).
 func (s *Scheduler) effectiveIntervals() report.ConfigIntervals {
 	if s.fast {
 		return report.ConfigIntervals{
@@ -361,5 +432,12 @@ func (s *Scheduler) effectiveIntervals() report.ConfigIntervals {
 	if i.DailyS <= 0 {
 		i.DailyS = 86400
 	}
+	// Conexión medida: multiplicar métricas y estado (no las muestras ni el daily).
+	if s.metered && s.srvCfg.MeteredIntervalMult > 1 {
+		mult := s.srvCfg.MeteredIntervalMult
+		i.MetricsS *= mult
+		i.StatusS *= mult
+	}
 	return i
 }
+

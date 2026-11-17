@@ -15,16 +15,33 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/sys/windows"
+	winsvc "golang.org/x/sys/windows/svc"
+
 	"github.com/enigma1980/vylax/agent/client"
 	"github.com/enigma1980/vylax/agent/collector"
 	"github.com/enigma1980/vylax/agent/logger"
 	"github.com/enigma1980/vylax/agent/report"
 	"github.com/enigma1980/vylax/agent/scheduler"
+	"github.com/enigma1980/vylax/agent/service"
 )
 
 const agentVersion = "0.1.0"
 
+var procSetPriorityClass = windows.NewLazySystemDLL("kernel32.dll").NewProc("SetPriorityClass")
+
 func main() {
+	// Detectar si se está ejecutando como servicio de Windows antes de procesar argumentos.
+	isService, err := winsvc.IsWindowsService()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error al detectar modo de ejecución:", err)
+		os.Exit(1)
+	}
+	if isService {
+		runAsWindowsService()
+		return
+	}
+
 	if len(os.Args) < 2 {
 		printUsage()
 		os.Exit(1)
@@ -34,6 +51,10 @@ func main() {
 		cmdRun(os.Args[2:])
 	case "enroll":
 		cmdEnroll(os.Args[2:])
+	case "service":
+		cmdService(os.Args[2:])
+	case "notify-uninstall":
+		cmdNotifyUninstall(os.Args[2:])
 	case "dump":
 		cmdDump(os.Args[2:])
 	default:
@@ -45,9 +66,57 @@ func main() {
 
 func printUsage() {
 	fmt.Fprintln(os.Stderr, "uso: vylax-agent.exe <subcomando>")
-	fmt.Fprintln(os.Stderr, "  run [--fast]                              Ejecuta el agente en primer plano")
-	fmt.Fprintln(os.Stderr, "  enroll --server <url> --token <token>     Alta del equipo (--force para sobrescribir)")
-	fmt.Fprintln(os.Stderr, "  dump [--quick] [--out <archivo>]          Vuelca métricas por consola (pruebas)")
+	fmt.Fprintln(os.Stderr, "  run [--fast]                                          Ejecuta el agente en primer plano")
+	fmt.Fprintln(os.Stderr, "  enroll --server <url> --token <token> [--force]       Alta del equipo")
+	fmt.Fprintln(os.Stderr, "  service install|uninstall|start|stop|status           Gestión del servicio de Windows")
+	fmt.Fprintln(os.Stderr, "  notify-uninstall [--reason manual|upgrade]            Notifica una desinstalación")
+	fmt.Fprintln(os.Stderr, "                   [--initiated-by <usuario>]")
+	fmt.Fprintln(os.Stderr, "  dump [--quick] [--out <archivo>]                      Vuelca métricas por consola")
+}
+
+// setPriority establece la prioridad del proceso a BELOW_NORMAL.
+func setPriority() {
+	const belowNormalPriorityClass = 0x00004000
+	// Pseudo-handle del proceso actual: (HANDLE)-1
+	procSetPriorityClass.Call(^uintptr(0), belowNormalPriorityClass)
+}
+
+// ---- modo servicio ----
+
+func runAsWindowsService() {
+	setPriority()
+
+	cfg, err := client.LoadConfig()
+	if err != nil {
+		// No está registrado; el SCM verá la salida limpia y reintentará según la política.
+		return
+	}
+	secret, err := client.LoadCredential()
+	if err != nil {
+		return
+	}
+	log, err := logger.New(client.LogFile)
+	if err != nil {
+		return
+	}
+	defer log.Close()
+
+	// Si arrancamos tras una actualización, borrar la marca de desinstalación.
+	if m := client.ReadUninstallMarker(); m != nil && m.Reason == "upgrade" {
+		client.DeleteUninstallMarker()
+		log.Printf("marcador de actualización eliminado; arrancando tras actualización")
+	}
+
+	hc, err := client.New(cfg.ServerURL, cfg.DeviceID, secret)
+	if err != nil {
+		log.Printf("URL del servidor inválida: %v", err)
+		return
+	}
+
+	log.Printf("Vylax Agent %s iniciando como servicio (device=%s)", agentVersion, cfg.DeviceID)
+	if err := service.RunAsService(hc, cfg, log, agentVersion); err != nil {
+		log.Printf("error en svc.Run: %v", err)
+	}
 }
 
 // ---- subcomando: run ----
@@ -57,6 +126,7 @@ func cmdRun(args []string) {
 		fmt.Fprintln(os.Stderr, "Vylax Agent necesita ejecutarse como administrador.")
 		os.Exit(1)
 	}
+	setPriority()
 
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	fast := fs.Bool("fast", false, "intervalos cortos (1 min métricas/status, 5 min daily)")
@@ -67,7 +137,6 @@ func cmdRun(args []string) {
 		fmt.Fprintln(os.Stderr, "ADVERTENCIA ACL:", err)
 	}
 
-	// Cargar config local
 	cfg, err := client.LoadConfig()
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -79,7 +148,6 @@ func cmdRun(args []string) {
 		os.Exit(1)
 	}
 
-	// Cargar credencial (cifrada con DPAPI)
 	secret, err := client.LoadCredential()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error al leer credencial:", err)
@@ -87,7 +155,6 @@ func cmdRun(args []string) {
 		os.Exit(1)
 	}
 
-	// Abrir log rotante
 	log, err := logger.New(client.LogFile)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error al abrir log:", err)
@@ -98,14 +165,12 @@ func cmdRun(args []string) {
 	log.Printf("Vylax Agent %s arrancando (device=%s server=%s fast=%v)",
 		agentVersion, cfg.DeviceID, cfg.ServerURL, *fast)
 
-	// Crear cliente HTTP
 	hc, err := client.New(cfg.ServerURL, cfg.DeviceID, secret)
 	if err != nil {
 		log.Printf("URL del servidor inválida: %v", err)
 		os.Exit(1)
 	}
 
-	// Capturar Ctrl+C / SIGTERM
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -134,13 +199,11 @@ func cmdEnroll(args []string) {
 		os.Exit(1)
 	}
 
-	// Crear directorio antes de cualquier otra comprobación
 	if err := client.SetupDataDir(); err != nil {
 		fmt.Fprintln(os.Stderr, "error al crear directorio de datos:", err)
 		os.Exit(1)
 	}
 
-	// Protección contra doble alta
 	if !*force && client.CredentialExists() {
 		fmt.Fprintln(os.Stderr, "este equipo ya está registrado.")
 		fmt.Fprintln(os.Stderr, "Para volver a darlo de alta usa --force (sobrescribe la credencial actual):")
@@ -148,7 +211,6 @@ func cmdEnroll(args []string) {
 		os.Exit(1)
 	}
 
-	// Recopilar datos del equipo
 	fmt.Println("recopilando datos del equipo...")
 	inv, _ := collector.CollectInventory()
 	hostname, _ := os.Hostname()
@@ -178,7 +240,6 @@ func cmdEnroll(args []string) {
 		os.Exit(1)
 	}
 
-	// Guardar config y credencial
 	localCfg := &client.LocalConfig{
 		ServerURL:     *server,
 		DeviceID:      resp.DeviceID,
@@ -197,7 +258,7 @@ func cmdEnroll(args []string) {
 	fmt.Printf("  device_id: %s\n", resp.DeviceID)
 	fmt.Printf("  estado:    %s\n", resp.Status)
 	fmt.Printf("  config:    v%d\n", resp.Config.ConfigVersion)
-	fmt.Println("ejecuta 'vylax-agent.exe run' para iniciar el agente.")
+	fmt.Println("ejecuta 'vylax-agent.exe service install' para instalar el servicio.")
 
 	// Enviar evento installed (best-effort)
 	hc, err := client.New(*server, resp.DeviceID, resp.DeviceSecret)
@@ -216,6 +277,131 @@ func cmdEnroll(args []string) {
 			fmt.Fprintln(os.Stderr, "advertencia: no se pudo enviar evento 'installed' al servidor")
 		}
 	}
+}
+
+// ---- subcomando: service ----
+
+func cmdService(args []string) {
+	if !client.IsElevated() {
+		fmt.Fprintln(os.Stderr, "Vylax Agent necesita ejecutarse como administrador.")
+		os.Exit(1)
+	}
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "uso: vylax-agent.exe service install|uninstall|start|stop|status")
+		os.Exit(1)
+	}
+	switch args[0] {
+	case "install":
+		exePath, err := os.Executable()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error al obtener ruta del ejecutable:", err)
+			os.Exit(1)
+		}
+		if err := service.Install(exePath); err != nil {
+			fmt.Fprintln(os.Stderr, "error al instalar:", err)
+			os.Exit(1)
+		}
+		fmt.Println("servicio instalado correctamente.")
+		fmt.Println("Para iniciarlo: vylax-agent.exe service start")
+	case "uninstall":
+		if err := service.Uninstall(); err != nil {
+			fmt.Fprintln(os.Stderr, "error al desinstalar:", err)
+			os.Exit(1)
+		}
+		fmt.Println("servicio desinstalado.")
+	case "start":
+		if err := service.Start(); err != nil {
+			fmt.Fprintln(os.Stderr, "error al iniciar:", err)
+			os.Exit(1)
+		}
+		fmt.Println("servicio iniciado.")
+	case "stop":
+		if err := service.Stop(); err != nil {
+			fmt.Fprintln(os.Stderr, "error al detener:", err)
+			os.Exit(1)
+		}
+		fmt.Println("servicio detenido.")
+	case "status":
+		st, err := service.QueryStatus()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		fmt.Printf("VylaxAgent: %s\n", st)
+	default:
+		fmt.Fprintf(os.Stderr, "subcomando desconocido: %q\n", args[0])
+		fmt.Fprintln(os.Stderr, "uso: vylax-agent.exe service install|uninstall|start|stop|status")
+		os.Exit(1)
+	}
+}
+
+// ---- subcomando: notify-uninstall ----
+
+func cmdNotifyUninstall(args []string) {
+	fs := flag.NewFlagSet("notify-uninstall", flag.ExitOnError)
+	reason := fs.String("reason", "manual", "motivo de la desinstalación (manual|upgrade)")
+	initiatedBy := fs.String("initiated-by", "", "usuario que inicia la desinstalación (lo pasa el MSI)")
+	_ = fs.Parse(args)
+
+	// Escribir el archivo de marca ANTES de enviar el evento.
+	// Esto indica al servicio (en STOP) que no envíe service_stopped.
+	if err := client.WriteUninstallMarker(*reason); err != nil {
+		fmt.Fprintln(os.Stderr, "advertencia: no se pudo escribir marca:", err)
+	}
+
+	// Si no está registrado, no hay nada que enviar.
+	cfg, err := client.LoadConfig()
+	if err != nil {
+		os.Exit(0)
+	}
+	secret, err := client.LoadCredential()
+	if err != nil {
+		os.Exit(0)
+	}
+	hc, err := client.New(cfg.ServerURL, cfg.DeviceID, secret)
+	if err != nil {
+		os.Exit(1)
+	}
+
+	// Usuario que inicia la desinstalación.
+	by := *initiatedBy
+	if by == "" {
+		by = collector.LoggedOnUser()
+	}
+
+	env := &report.Envelope{
+		SchemaVersion: 1,
+		AgentVersion:  agentVersion,
+		SentAt:        time.Now().UTC().Format(time.RFC3339),
+		Reports: []report.Report{report.Event{
+			Type:       "event",
+			Event:      "uninstall",
+			OccurredAt: time.Now().UTC().Format(time.RFC3339),
+			Data: map[string]any{
+				"reason":       *reason,
+				"initiated_by": by,
+			},
+		}},
+	}
+
+	// Reintentar durante 20 s (con pausas de 2 s).
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		outcome, _, err := hc.SendReports(env)
+		if outcome.Result == client.SendOK {
+			fmt.Println("evento de desinstalación enviado.")
+			return
+		}
+		if outcome.Result == client.SendRetry || err != nil {
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		break // 401, 410, etc.: no reintentar
+	}
+
+	// Si no se pudo enviar, guardar en caché para el próximo arranque.
+	_ = client.SaveToCache(env, 10)
+	fmt.Fprintln(os.Stderr, "no se pudo enviar el evento; guardado en caché.")
 }
 
 // ---- subcomando: dump ----
@@ -272,7 +458,6 @@ func cmdDump(args []string) {
 
 // ---- helpers ----
 
-// detectDeviceType mapea el tipo de chasis SMBIOS a laptop/server/desktop.
 func detectDeviceType(chassis string) string {
 	switch strings.ToLower(chassis) {
 	case "laptop", "notebook", "portable", "sub-notebook", "tablet", "convertible", "detachable":

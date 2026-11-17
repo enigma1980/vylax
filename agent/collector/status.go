@@ -17,6 +17,12 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
+// LoggedOnUser devuelve el usuario interactivo conectado (vía WTS).
+// Exportado para uso en main (notify-uninstall).
+func LoggedOnUser() string {
+	return collectLoggedOnUser()
+}
+
 func CollectStatus(inventoryHash string) report.Status {
 	now := time.Now().UTC()
 	bt := collectBootTime()

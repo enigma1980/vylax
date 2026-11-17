@@ -54,6 +54,16 @@ func CollectMetrics(sampleInterval time.Duration, sampleCount int, criticalServi
 	}
 }
 
+// QuickCPUPercent toma una muestra de CPU de 1 s.
+// Usada por el scheduler para decidir si las condiciones permiten una tarea pesada.
+func QuickCPUPercent() float64 {
+	pcts, err := cpu.Percent(1*time.Second, false)
+	if err != nil || len(pcts) == 0 {
+		return 0
+	}
+	return pcts[0]
+}
+
 func sampleCPU(interval time.Duration, count int) (avg, max float64) {
 	var total float64
 	for i := 0; i < count; i++ {
