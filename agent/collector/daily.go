@@ -20,10 +20,12 @@ import (
 func CollectDaily() report.Daily {
 	now := time.Now().UTC()
 	return report.Daily{
-		Type:          "daily",
-		CollectedAt:   now.Format(time.RFC3339),
-		PhysicalDisks: collectDiskHealth(),
-		WindowsUpdate: collectWindowsUpdate(),
+		Type:        "daily",
+		CollectedAt: now.Format(time.RFC3339),
+		PhysicalDisks: withTimeout("disk_health", 30*time.Second,
+			collectDiskHealth, nil),
+		WindowsUpdate: withTimeout("windows_update", 90*time.Second,
+			collectWindowsUpdate, report.WindowsUpdate{}),
 	}
 }
 

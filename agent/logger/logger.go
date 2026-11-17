@@ -63,6 +63,31 @@ func (l *Logger) Printf(format string, args ...any) {
 	}
 }
 
+// Writer devuelve un io.Writer que escribe en el archivo de log del agente.
+// Úsalo con log.SetOutput para que los mensajes de paquetes externos
+// (gopsutil, wmi, etc.) también aparezcan en vylax-agent.log en modo servicio.
+func (l *Logger) Writer() io.Writer {
+	return &logWriter{l: l}
+}
+
+type logWriter struct{ l *Logger }
+
+func (w *logWriter) Write(p []byte) (n int, err error) {
+	w.l.mu.Lock()
+	defer w.l.mu.Unlock()
+	// El log estándar ya añade su propio timestamp; escribimos el bytes tal cual
+	// en el archivo (y en stderr, por si hubiera algún capturador activo).
+	mw := io.MultiWriter(w.l.file, os.Stderr)
+	n, err = mw.Write(p)
+	if err == nil {
+		w.l.written += int64(n)
+		if w.l.written >= maxLogSize {
+			w.l.rotate()
+		}
+	}
+	return
+}
+
 // Close cierra el archivo de log.
 func (l *Logger) Close() {
 	l.mu.Lock()

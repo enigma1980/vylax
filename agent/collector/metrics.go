@@ -130,9 +130,12 @@ func collectVolumes() []report.Volume {
 		if mask&(1<<uint(i)) == 0 {
 			continue
 		}
-		mountpoint := string(rune('A'+i)) + `:\`
+		// letter es el mount que va al informe ("C:"); rootPath lleva la barra
+		// para las llamadas Win32 que esperan una raíz de volumen ("C:\").
+		letter := string(rune('A'+i)) + ":"
+		rootPath := letter + `\`
 
-		rootPtr, err := windows.UTF16PtrFromString(mountpoint)
+		rootPtr, err := windows.UTF16PtrFromString(rootPath)
 		if err != nil {
 			continue
 		}
@@ -166,7 +169,7 @@ func collectVolumes() []report.Volume {
 
 		// Excluir unidades virtuales / nube (Google Drive File Stream, OneDrive, etc.)
 		// que montan como DRIVE_FIXED pero no tienen dispositivo de almacenamiento físico.
-		if !hasPhysicalDevice(mountpoint) {
+		if !hasPhysicalDevice(letter) {
 			continue
 		}
 
@@ -181,7 +184,7 @@ func collectVolumes() []report.Volume {
 		}
 
 		out = append(out, report.Volume{
-			Mount:      mountpoint,
+			Mount:      letter,
 			Label:      windows.UTF16ToString(volName[:]),
 			FS:         fstype,
 			TotalBytes: totalBytes,

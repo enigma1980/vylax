@@ -62,6 +62,18 @@ type Scheduler struct {
 	// shutdownEventDisabled indica que los eventos de ciclo de vida de parada
 	// los gestiona el handler del servicio, no el bucle Run.
 	shutdownEventDisabled bool
+
+	// heavyRunning indica que la recogida pesada está en marcha en segundo plano.
+	// heavyResultCh recibe el resultado cuando termina.
+	heavyRunning  bool
+	heavyResultCh chan heavyResult
+}
+
+// heavyResult empaqueta los datos recogidos en segundo plano por doHeavyCollection.
+type heavyResult struct {
+	inv     report.Inventory
+	invHash string
+	daily   report.Daily
 }
 
 // DisableShutdownEvent indica al scheduler que no envíe el evento de parada
@@ -74,12 +86,13 @@ func (s *Scheduler) DisableShutdownEvent() {
 // New crea un Scheduler.
 func New(hc *client.Client, localCfg *client.LocalConfig, log *logger.Logger, agentVer string, fast bool) *Scheduler {
 	s := &Scheduler{
-		hc:       hc,
-		localCfg: localCfg,
-		srvCfg:   defaultSrvConfig,
-		log:      log,
-		agentVer: agentVer,
-		fast:     fast,
+		hc:            hc,
+		localCfg:      localCfg,
+		srvCfg:        defaultSrvConfig,
+		log:           log,
+		agentVer:      agentVer,
+		fast:          fast,
+		heavyResultCh: make(chan heavyResult, 1),
 	}
 	if localCfg.ConfigVersion > 0 {
 		s.srvCfg.ConfigVersion = localCfg.ConfigVersion
@@ -171,6 +184,19 @@ func (s *Scheduler) Run(ctx context.Context) {
 				s.scheduleHeavy(ctx)
 			}
 
+		case hr := <-s.heavyResultCh:
+			// La goroutine de recogida pesada ha terminado.
+			s.heavyRunning = false
+			invCopy := hr.inv
+			s.invData = &invCopy
+			s.invHash = hr.invHash
+			rsp := s.doSend(ctx, []report.Report{hr.daily})
+			s.lastDailySent = time.Now()
+			if rsp != nil && rsp.RequestInventory && s.invData != nil {
+				s.log.Printf("servidor solicita inventario completo, enviando...")
+				s.doSend(ctx, []report.Report{s.invData})
+			}
+
 		case now := <-ticker.C:
 			if s.stopped {
 				continue
@@ -255,24 +281,28 @@ func (s *Scheduler) heavyReady() bool {
 	return true
 }
 
-// doHeavyCollection recoge inventario y daily, los envía y gestiona request_inventory.
+// doHeavyCollection lanza la recogida de inventario y daily en segundo plano
+// para no bloquear el bucle principal de métricas. El resultado llega al select
+// de Run() a través de heavyResultCh. Los envíos de red se hacen siempre desde
+// el bucle principal, donde no hay concurrencia sobre el estado del scheduler.
 func (s *Scheduler) doHeavyCollection(ctx context.Context) {
+	if s.heavyRunning {
+		return
+	}
+	s.heavyRunning = true
 	s.heavyPending = false
 	s.heavyDeadline = time.Time{}
 
-	inv, invHash := collector.CollectInventory()
-	s.invHash = invHash
-	invCopy := inv
-	s.invData = &invCopy
-
-	daily := collector.CollectDaily()
-	rsp := s.doSend(ctx, []report.Report{daily})
-	s.lastDailySent = time.Now()
-
-	if rsp != nil && rsp.RequestInventory {
-		s.log.Printf("servidor solicita inventario completo, enviando...")
-		s.doSend(ctx, []report.Report{s.invData})
-	}
+	s.log.Printf("iniciando recogida pesada en segundo plano (inventory + daily)...")
+	go func() {
+		inv, invHash := collector.CollectInventory()
+		daily := collector.CollectDaily()
+		select {
+		case s.heavyResultCh <- heavyResult{inv: inv, invHash: invHash, daily: daily}:
+		case <-ctx.Done():
+			// El scheduler se está apagando; resultado descartado.
+		}
+	}()
 }
 
 // doSendStatus recoge y envía un informe de estado; actualiza onBattery y metered.

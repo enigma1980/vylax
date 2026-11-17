@@ -27,7 +27,7 @@ func CollectStatus(inventoryHash string) report.Status {
 	now := time.Now().UTC()
 	bt := collectBootTime()
 	rebootPending, reasons := collectRebootPending()
-	av := collectAntivirus()
+	av := withTimeout("antivirus", 30*time.Second, collectAntivirus, nil)
 	user := collectLoggedOnUser()
 	net := collectNetwork()
 	metered := collectMeteredConnection()

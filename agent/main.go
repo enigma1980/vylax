@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	golog "log"
 	"os"
 	"os/signal"
 	"runtime"
@@ -100,6 +101,12 @@ func runAsWindowsService() {
 		return
 	}
 	defer log.Close()
+
+	// Redirigir el log estándar de Go al archivo del agente para que los avisos
+	// de paquetes externos (gopsutil, wmi, etc.) también aparezcan en modo servicio.
+	// En modo servicio stderr se descarta; sin esta redirección esos mensajes se perderían.
+	golog.SetOutput(log.Writer())
+	defer golog.SetOutput(os.Stderr)
 
 	// Si arrancamos tras una actualización, borrar la marca de desinstalación.
 	if m := client.ReadUninstallMarker(); m != nil && m.Reason == "upgrade" {

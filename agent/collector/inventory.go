@@ -96,37 +96,57 @@ var busTypeNames = map[uint16]string{
 	16: "Storage Spaces", 17: "NVMe",
 }
 
+// wmiQuery ejecuta una consulta WMI con tiempo máximo de 30 s.
+// Registra el error si lo hay y devuelve nil si se supera el tiempo o hay error.
+func wmiQuery[T any](name, query string) []T {
+	return withTimeout(name, 30*time.Second, func() []T {
+		var rows []T
+		if err := wmi.Query(query, &rows); err != nil {
+			log.Printf("aviso inventory: %s: %v", name, err)
+			return nil
+		}
+		return rows
+	}, nil)
+}
+
+// wmiQueryNS es igual que wmiQuery pero en un namespace distinto del por defecto.
+func wmiQueryNS[T any](name, query, ns string) []T {
+	return withTimeout(name, 30*time.Second, func() []T {
+		var rows []T
+		if err := wmi.QueryNamespace(query, &rows, ns); err != nil {
+			log.Printf("aviso inventory: %s: %v", name, err)
+			return nil
+		}
+		return rows
+	}, nil)
+}
+
 func CollectInventory() (report.Inventory, string) {
 	var inv report.Inventory
 	inv.Type = "inventory"
 
 	// Sistema (fabricante, modelo)
-	var cs []win32ComputerSystem
-	if err := wmi.Query("SELECT Manufacturer, Model FROM Win32_ComputerSystem", &cs); err != nil {
-		log.Printf("aviso inventory: Win32_ComputerSystem: %v", err)
-	} else if len(cs) > 0 {
-		inv.System.Manufacturer = cleanHWString(cs[0].Manufacturer)
-		inv.System.Model = cleanHWString(cs[0].Model)
-	}
-
-	// Número de serie: Win32_BIOS para versión BIOS + Win32_SystemEnclosure para serie
 	type win32BIOSSerial struct {
 		SMBIOSBIOSVersion string
 		SerialNumber      string
 	}
-	var bios []win32BIOSSerial
-	if err := wmi.Query("SELECT SMBIOSBIOSVersion, SerialNumber FROM Win32_BIOS", &bios); err != nil {
-		log.Printf("aviso inventory: Win32_BIOS: %v", err)
-	} else if len(bios) > 0 {
+
+	if cs := wmiQuery[win32ComputerSystem]("Win32_ComputerSystem",
+		"SELECT Manufacturer, Model FROM Win32_ComputerSystem"); len(cs) > 0 {
+		inv.System.Manufacturer = cleanHWString(cs[0].Manufacturer)
+		inv.System.Model = cleanHWString(cs[0].Model)
+	}
+
+	// BIOS y número de serie
+	if bios := wmiQuery[win32BIOSSerial]("Win32_BIOS",
+		"SELECT SMBIOSBIOSVersion, SerialNumber FROM Win32_BIOS"); len(bios) > 0 {
 		inv.System.BIOSVersion = cleanHWString(bios[0].SMBIOSBIOSVersion)
 		inv.System.SerialNumber = cleanHWString(bios[0].SerialNumber)
 	}
 
 	// Chasis
-	var enc []win32SystemEnclosure
-	if err := wmi.Query("SELECT ChassisTypes FROM Win32_SystemEnclosure", &enc); err != nil {
-		log.Printf("aviso inventory: Win32_SystemEnclosure: %v", err)
-	} else if len(enc) > 0 && len(enc[0].ChassisTypes) > 0 {
+	if enc := wmiQuery[win32SystemEnclosure]("Win32_SystemEnclosure",
+		"SELECT ChassisTypes FROM Win32_SystemEnclosure"); len(enc) > 0 && len(enc[0].ChassisTypes) > 0 {
 		ct := uint16(enc[0].ChassisTypes[0])
 		if name, ok := chassisTypeNames[ct]; ok {
 			inv.System.Chassis = name
@@ -136,18 +156,14 @@ func CollectInventory() (report.Inventory, string) {
 	}
 
 	// UUID SMBIOS
-	var csp []win32ComputerSystemProduct
-	if err := wmi.Query("SELECT UUID FROM Win32_ComputerSystemProduct", &csp); err != nil {
-		log.Printf("aviso inventory: Win32_ComputerSystemProduct: %v", err)
-	} else if len(csp) > 0 {
+	if csp := wmiQuery[win32ComputerSystemProduct]("Win32_ComputerSystemProduct",
+		"SELECT UUID FROM Win32_ComputerSystemProduct"); len(csp) > 0 {
 		inv.System.SMBIOSuuid = csp[0].UUID
 	}
 
 	// CPU
-	var procs []win32Processor
-	if err := wmi.Query("SELECT Name, NumberOfCores, NumberOfLogicalProcessors FROM Win32_Processor", &procs); err != nil {
-		log.Printf("aviso inventory: Win32_Processor: %v", err)
-	} else if len(procs) > 0 {
+	if procs := wmiQuery[win32Processor]("Win32_Processor",
+		"SELECT Name, NumberOfCores, NumberOfLogicalProcessors FROM Win32_Processor"); len(procs) > 0 {
 		inv.CPU.Model = procs[0].Name
 		inv.CPU.Cores = procs[0].NumberOfCores
 		inv.CPU.Threads = procs[0].NumberOfLogicalProcessors
@@ -213,10 +229,10 @@ func collectOSInfo() report.OSInfo {
 }
 
 func collectPhysicalDisksForInventory() []report.PhysicalDisk {
-	var rows []msftPhysicalDiskInv
-	q := "SELECT Model, SerialNumber, MediaType, BusType, Size FROM MSFT_PhysicalDisk"
-	if err := wmi.QueryNamespace(q, &rows, `ROOT\Microsoft\Windows\Storage`); err != nil {
-		log.Printf("aviso inventory: MSFT_PhysicalDisk: %v", err)
+	rows := wmiQueryNS[msftPhysicalDiskInv]("MSFT_PhysicalDisk_inv",
+		"SELECT Model, SerialNumber, MediaType, BusType, Size FROM MSFT_PhysicalDisk",
+		`ROOT\Microsoft\Windows\Storage`)
+	if rows == nil {
 		return nil
 	}
 
