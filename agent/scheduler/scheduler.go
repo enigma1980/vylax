@@ -195,8 +195,8 @@ func (s *Scheduler) Run(ctx context.Context) {
 	// Si warmupDelay==0 el timer ya expiró antes de entrar al loop;
 	// ejecutar la tarea pesada inicial directamente.
 	if warmupDone {
-		s.log.Printf("warmup completado (uptime=%s); programando tarea pesada...", winUptime.Round(time.Second))
-		s.scheduleHeavy(ctx)
+		s.log.Printf("warmup completado (uptime=%s); comprobando tarea pesada...", winUptime.Round(time.Second))
+		s.onWarmupCompleted(ctx)
 	}
 
 	for {
@@ -212,8 +212,8 @@ func (s *Scheduler) Run(ctx context.Context) {
 		case <-warmupTimer.C:
 			if !warmupDone {
 				warmupDone = true
-				s.log.Printf("warmup completado; programando tarea pesada...")
-				s.scheduleHeavy(ctx)
+				s.log.Printf("warmup completado; comprobando tarea pesada...")
+				s.onWarmupCompleted(ctx)
 			}
 
 		case <-s.resumeCh:
@@ -304,6 +304,23 @@ func (s *Scheduler) Run(ctx context.Context) {
 				}
 			}
 		}
+	}
+}
+
+// onWarmupCompleted se llama al finalizar el período de warmup.
+// Solo programa la tarea pesada si el daily toca; si no, el ticker lo hará cuando corresponda.
+// De este modo un reinicio del servicio < 24 h después del último daily no repite la recogida pesada.
+func (s *Scheduler) onWarmupCompleted(ctx context.Context) {
+	dailyD := time.Duration(s.effectiveIntervals().DailyS) * time.Second
+	if time.Since(s.lastDailySent) >= dailyD {
+		s.log.Printf("tarea pesada programada tras warmup (último daily hace %s)",
+			time.Since(s.lastDailySent).Round(time.Second))
+		s.scheduleHeavy(ctx)
+	} else {
+		remaining := dailyD - time.Since(s.lastDailySent)
+		s.log.Printf("warmup completado; daily reciente (hace %s), próximo en %s",
+			time.Since(s.lastDailySent).Round(time.Second),
+			remaining.Round(time.Second))
 	}
 }
 
