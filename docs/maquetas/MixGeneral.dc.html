@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Vylax – Vista general (mix)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#111214}
+a{color:#7AA8FF}a:hover{color:#A9C6FF}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #111214; color: #E7E8EA; font-family: Inter, system-ui, sans-serif; display: flex; flex-direction: column">
+
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid #2B2D31; background: #16171A">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true"><rect x="1" y="1" width="26" height="26" rx="8" fill="none" stroke="#4C8DFF" stroke-width="2"></rect><path d="M8 9l6 11 6-11" fill="none" stroke="#E7E8EA" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <span style="font-size: 18px; font-weight: 700">Vylax</span>
+    </div>
+    <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #9EA3AB">Organización
+      <select style="background: #1A1B1E; color: #E7E8EA; border: 1px solid #2B2D31; border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px"><option>Global-Link</option><option>Tecinfo</option></select>
+    </label>
+    <label style="flex: 1 1 240px; display: flex; align-items: center; gap: 8px; background: #1A1B1E; border: 1px solid #2B2D31; border-radius: 8px; padding: 8px 12px; font-size: 14px; color: #9EA3AB"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden">Buscar</span><input type="search" placeholder="Buscar cliente, equipo o IP" style="flex: 1; min-width: 0; background: transparent; border: 0; color: #E7E8EA; font: inherit; outline: none"></label>
+    <button type="button" aria-label="Notificaciones" style="width: 40px; height: 40px; border-radius: 8px; border: 1px solid #2B2D31; background: #1A1B1E; color: #E7E8EA; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6zM10 19a2 2 0 0 0 4 0"></path></svg></button>
+    <span style="width: 36px; height: 36px; border-radius: 50%; background: #2B3E66; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700" aria-label="Pepe Viader">PV</span>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; flex: 1">
+    <nav aria-label="Menú principal" style="flex: 0 0 72px; background: #16171A; border-right: 1px solid #2B2D31; padding: 16px 0; display: flex; flex-direction: column; align-items: center; gap: 8px">
+      <a href="#" aria-label="Vista general" style="width: 48px; height: 48px; border-radius: 10px; background: #1F2A44; color: #7AA8FF; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></a>
+      <a href="MixCliente.dc.html" aria-label="Clientes" style="width: 48px; height: 48px; border-radius: 10px; color: #9EA3AB; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"></path></svg></a>
+      <a href="#" aria-label="Equipos" style="width: 48px; height: 48px; border-radius: 10px; color: #9EA3AB; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M8 20h8M12 16v4"></path></svg></a>
+      <a href="#" aria-label="Pendientes de asignar (1)" style="position: relative; width: 48px; height: 48px; border-radius: 10px; color: #9EA3AB; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v12H4zM4 16l3 4h10l3-4"></path></svg><span style="position: absolute; top: 8px; right: 8px; width: 9px; height: 9px; border-radius: 50%; background: #F5B942"></span></a>
+      <a href="#" aria-label="Alertas" style="width: 48px; height: 48px; border-radius: 10px; color: #9EA3AB; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6zM10 19a2 2 0 0 0 4 0"></path></svg></a>
+      <a href="#" aria-label="Ajustes" style="margin-top: auto; width: 48px; height: 48px; border-radius: 10px; color: #9EA3AB; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"></path></svg></a>
+    </nav>
+
+    <main style="flex: 999 1 560px; min-width: 0; padding: 24px; box-sizing: border-box">
+      <div style="max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px">
+
+        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px">
+          <h1 style="margin: 0; font-size: 22px; font-weight: 600">Vista general</h1>
+          <span style="font-size: 12px; color: #F5B942">Datos de ejemplo, salvo EnigmaPC</span>
+        </div>
+
+        <section aria-label="Resumen" style="background: #1A1B1E; border: 1px solid #2B2D31; border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px">
+            <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; color: #9EA3AB">Equipos</span><span style="font-size: 26px; font-weight: 700">48</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px; border-left: 1px solid #2B2D31; padding-left: 16px"><span style="font-size: 13px; color: #9EA3AB">En línea</span><span style="font-size: 26px; font-weight: 700; color: #3DD68C">41</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px; border-left: 1px solid #2B2D31; padding-left: 16px"><span style="font-size: 13px; color: #9EA3AB">Sin reportar</span><span style="font-size: 26px; font-weight: 700; color: #F06A6A">2</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px; border-left: 1px solid #2B2D31; padding-left: 16px"><span style="font-size: 13px; color: #9EA3AB">Pendientes de asignar</span><span style="font-size: 26px; font-weight: 700; color: #F5B942">1</span></div>
+          </div>
+          <div role="img" aria-label="41 en línea, 5 apagados normales, 2 sin reportar" style="display: flex; height: 8px; border-radius: 999px; overflow: hidden; gap: 2px">
+            <span style="flex: 41; background: #3DD68C"></span><span style="flex: 5; background: #4A4E56"></span><span style="flex: 2; background: #F06A6A"></span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 18px; font-size: 12px; color: #9EA3AB"><span>■ <span style="color: #3DD68C">En línea</span></span><span>■ Apagados (portátiles, normal)</span><span>■ <span style="color: #F06A6A">Sin reportar</span></span></div>
+        </section>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+          <section style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+            <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px">
+              <h2 style="margin: 0; font-size: 16px; font-weight: 600">Clientes</h2>
+              <div style="display: flex; gap: 8px">
+                <button type="button" style="border: 1px solid #2B2D31; background: #1F2A44; color: #E7E8EA; border-radius: 8px; padding: 8px 12px; font: inherit; font-size: 13px">Cuadrícula</button>
+                <button type="button" style="border: 1px solid #2B2D31; background: #1A1B1E; color: #9EA3AB; border-radius: 8px; padding: 8px 12px; font: inherit; font-size: 13px">Lista</button>
+                <button type="button" style="border: 0; background: #4C8DFF; color: #0B1220; border-radius: 8px; padding: 8px 14px; font: inherit; font-size: 13px; font-weight: 600">+ Nuevo cliente</button>
+              </div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px">
+              <sc-for list="{{clients}}" as="c" hint-placeholder-count="5">
+                <a href="MixCliente.dc.html" style="text-decoration: none; color: inherit; background: #1A1B1E; border: 1px solid #2B2D31; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+                  <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px">
+                    <span style="font-size: 15px; font-weight: 600">{{c.name}}</span>
+                    <span style="{{c.pill}}">{{c.status}}</span>
+                  </div>
+                  <span style="font-size: 12px; color: #9EA3AB">{{c.sites}}</span>
+                  <div style="display: flex; flex-direction: column; gap: 6px">
+                    <div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #9EA3AB">En línea</span><span>{{c.onlineText}}</span></div>
+                    <div style="height: 6px; background: #2B2D31; border-radius: 999px; overflow: hidden"><div style="{{c.bar}}"></div></div>
+                  </div>
+                  <div style="display: flex; gap: 14px; font-size: 12px; color: #9EA3AB">
+                    <span style="display: flex; align-items: center; gap: 5px"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="7" rx="1.5"></rect><rect x="4" y="14" width="16" height="7" rx="1.5"></rect></svg>{{c.servers}}</span>
+                    <span style="display: flex; align-items: center; gap: 5px"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M8 20h8"></path></svg>{{c.pcs}}</span>
+                    <span style="display: flex; align-items: center; gap: 5px"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="5" width="14" height="10" rx="1.5"></rect><path d="M3 19h18"></path></svg>{{c.laptops}}</span>
+                  </div>
+                  <div style="border-top: 1px solid #2B2D31; padding-top: 10px; font-size: 13px; color: #C9CCD1">{{c.reason}}</div>
+                </a>
+              </sc-for>
+            </div>
+          </section>
+
+          <aside style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+            <div style="background: #1A1B1E; border: 1px solid #2B2D31; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+              <h2 style="margin: 0; font-size: 15px; font-weight: 600">Actualizaciones al día</h2>
+              <div style="display: flex; align-items: center; gap: 18px">
+                <div style="position: relative; width: 110px; height: 110px; flex: none">
+                  <svg viewBox="0 0 120 120" width="110" height="110" role="img" aria-label="83 % de los equipos al día">
+                    <circle cx="60" cy="60" r="48" fill="none" stroke="#2B2D31" stroke-width="12"></circle>
+                    <circle cx="60" cy="60" r="48" fill="none" stroke="#3DD68C" stroke-width="12" stroke-dasharray="250 302" transform="rotate(-90 60 60)" stroke-linecap="round"></circle>
+                  </svg>
+                  <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700">83 %</div>
+                </div>
+                <div style="font-size: 13px; color: #9EA3AB; display: flex; flex-direction: column; gap: 6px"><span><span style="color: #3DD68C">40</span> al día</span><span><span style="color: #F06A6A">8</span> con más de 45 días</span></div>
+              </div>
+            </div>
+            <div style="background: #1A1B1E; border: 1px solid #2B2D31; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 8px">
+              <h2 style="margin: 0; font-size: 15px; font-weight: 600">En línea · 7 días</h2>
+              <svg viewBox="0 0 300 110" role="img" aria-label="Equipos en línea por día, entre 36 y 44" style="width: 100%; height: auto">
+                <defs><linearGradient id="gmx" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4C8DFF" stop-opacity="0.35"></stop><stop offset="1" stop-color="#4C8DFF" stop-opacity="0"></stop></linearGradient></defs>
+                <g stroke="#2B2D31" stroke-dasharray="4 4"><line x1="0" y1="20" x2="300" y2="20"></line><line x1="0" y1="55" x2="300" y2="55"></line><line x1="0" y1="90" x2="300" y2="90"></line></g>
+                <path d="M0 60 L50 52 L100 64 L150 45 L200 50 L250 68 L300 40 L300 95 L0 95 Z" fill="url(#gmx)"></path>
+                <path d="M0 60 L50 52 L100 64 L150 45 L200 50 L250 68 L300 40" fill="none" stroke="#4C8DFF" stroke-width="2.5"></path>
+              </svg>
+            </div>
+            <div style="background: #1A1B1E; border: 1px solid #2B2D31; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+              <h2 style="margin: 0; font-size: 15px; font-weight: 600">Discos con menos espacio</h2>
+              <sc-for list="{{disks}}" as="d" hint-placeholder-count="3">
+                <div style="display: flex; flex-direction: column; gap: 5px">
+                  <div style="display: flex; justify-content: space-between; font-size: 13px; gap: 8px"><span>{{d.name}}</span><span style="color: #F5B942">{{d.pct}}</span></div>
+                  <div style="height: 6px; background: #2B2D31; border-radius: 999px; overflow: hidden"><div style="{{d.bar}}"></div></div>
+                </div>
+              </sc-for>
+            </div>
+          </aside>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var color = { ok: '#3DD68C', warn: '#F5B942', crit: '#F06A6A' };
+    var bg = { ok: '#16352A', warn: '#3A2E14', crit: '#3B1B1B' };
+    var pill = function (c) { return 'font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;color:' + color[c] + ';background:' + bg[c]; };
+    var client = function (name, sites, online, total, servers, pcs, laptops, reason, c, label) {
+      return {
+        name: name, sites: sites, onlineText: online + ' / ' + total, servers: servers, pcs: pcs, laptops: laptops,
+        reason: reason, status: label, pill: pill(c),
+        bar: 'height:100%;border-radius:999px;background:' + color[c === 'ok' ? 'ok' : c] + ';width:' + Math.round(online / total * 100) + '%'
+      };
+    };
+    return {
+      clients: [
+        client('Clínica Serra', '2 sedes', 13, 15, 2, 9, 4, 'Servidor SRV-01 sin reportar desde hace 25 min', 'crit', 'Crítico'),
+        client('Cliente Demo', '1 sede', 1, 1, 0, 1, 0, 'EnigmaPC: disco C: al 95 % y Windows 10 sin soporte', 'warn', 'Aviso'),
+        client('Despacho Martí', '1 sede', 8, 9, 1, 6, 2, 'PC-RECEPCION sin reportar desde hace 4 días', 'warn', 'Aviso'),
+        client('Transportes Vall', '3 sedes', 7, 11, 1, 4, 6, 'Sin incidencias · 4 portátiles apagados', 'ok', 'Correcto'),
+        client('Global-Link (oficina)', '1 sede', 12, 12, 1, 8, 3, 'Sin incidencias', 'ok', 'Correcto')
+      ],
+      disks: [
+        { name: 'EnigmaPC · C:', pct: '95 %', bar: 'height:100%;width:95%;background:#F5B942;border-radius:999px' },
+        { name: 'EnigmaPC · E:', pct: '93 %', bar: 'height:100%;width:93%;background:#F5B942;border-radius:999px' },
+        { name: 'SRV-01 · D:', pct: '93 %', bar: 'height:100%;width:93%;background:#F5B942;border-radius:999px' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Vylax – Cliente con detalle lateral (mix)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#111214}
+a{color:#7AA8FF}a:hover{color:#A9C6FF}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #111214; color: #E7E8EA; font-family: Inter, system-ui, sans-serif; display: flex; flex-direction: column">
+
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid #2B2D31; background: #16171A">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true"><rect x="1" y="1" width="26" height="26" rx="8" fill="none" stroke="#4C8DFF" stroke-width="2"></rect><path d="M8 9l6 11 6-11" fill="none" stroke="#E7E8EA" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <span style="font-size: 18px; font-weight: 700">Vylax</span>
+    </div>
+    <nav aria-label="Ruta" style="font-size: 14px; color: #9EA3AB; display: flex; gap: 8px; align-items: center"><a href="MixGeneral.dc.html" style="text-decoration: none">Global-Link</a><span aria-hidden="true">/</span><span>Clientes</span><span aria-hidden="true">/</span><span style="color: #E7E8EA">Cliente Demo</span></nav>
+    <label style="flex: 1 1 240px; display: flex; align-items: center; gap: 8px; background: #1A1B1E; border: 1px solid #2B2D31; border-radius: 8px; padding: 8px 12px; font-size: 14px; color: #9EA3AB"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden">Buscar</span><input type="search" placeholder="Buscar equipo o IP" style="flex: 1; min-width: 0; background: transparent; border: 0; color: #E7E8EA; font: inherit; outline: none"></label>
+    <span style="width: 36px; height: 36px; border-radius: 50%; background: #2B3E66; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700" aria-label="Pepe Viader">PV</span>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; flex: 1">
+    <nav aria-label="Menú principal" style="flex: 0 0 72px; background: #16171A; border-right: 1px solid #2B2D31; padding: 16px 0; display: flex; flex-direction: column; align-items: center; gap: 8px">
+      <a href="MixGeneral.dc.html" aria-label="Vista general" style="width: 48px; height: 48px; border-radius: 10px; color: #9EA3AB; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></a>
+      <a href="#" aria-label="Clientes" style="width: 48px; height: 48px; border-radius: 10px; background: #1F2A44; color: #7AA8FF; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"></path></svg></a>
+      <a href="#" aria-label="Equipos" style="width: 48px; height: 48px; border-radius: 10px; color: #9EA3AB; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M8 20h8M12 16v4"></path></svg></a>
+      <a href="#" aria-label="Alertas" style="width: 48px; height: 48px; border-radius: 10px; color: #9EA3AB; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6zM10 19a2 2 0 0 0 4 0"></path></svg></a>
+    </nav>
+
+    <main style="flex: 999 1 560px; min-width: 0; padding: 24px; box-sizing: border-box; display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+
+      <section style="flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px">
+          <div>
+            <h1 style="margin: 0; font-size: 22px; font-weight: 600">Cliente Demo</h1>
+            <p style="margin: 4px 0 0; font-size: 13px; color: #9EA3AB">Sede Principal · 6 equipos · lista ampliada con equipos de ejemplo, salvo EnigmaPC</p>
+          </div>
+          <button type="button" style="border: 0; background: #4C8DFF; color: #0B1220; border-radius: 8px; padding: 9px 14px; font: inherit; font-size: 13px; font-weight: 600">+ Añadir equipo</button>
+        </div>
+
+        <div role="tablist" aria-label="Secciones del cliente" style="display: flex; gap: 4px; border-bottom: 1px solid #2B2D31">
+          <button type="button" role="tab" aria-selected="true" style="background: none; border: 0; border-bottom: 2px solid #4C8DFF; color: #E7E8EA; padding: 10px 14px; font: inherit; font-size: 14px; font-weight: 600">Equipos</button>
+          <button type="button" role="tab" aria-selected="false" style="background: none; border: 0; color: #9EA3AB; padding: 10px 14px; font: inherit; font-size: 14px">Sedes</button>
+          <button type="button" role="tab" aria-selected="false" style="background: none; border: 0; color: #9EA3AB; padding: 10px 14px; font: inherit; font-size: 14px">Tokens de alta</button>
+          <button type="button" role="tab" aria-selected="false" style="background: none; border: 0; color: #9EA3AB; padding: 10px 14px; font: inherit; font-size: 14px">Ajustes</button>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 8px">
+          <button type="button" style="border: 1px solid #4C8DFF; background: #1F2A44; color: #E7E8EA; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px">Todos 6</button>
+          <button type="button" style="border: 1px solid #2B2D31; background: #1A1B1E; color: #C9CCD1; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px">Con avisos 2</button>
+          <button type="button" style="border: 1px solid #2B2D31; background: #1A1B1E; color: #C9CCD1; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px">Servidores 1</button>
+          <button type="button" style="border: 1px solid #2B2D31; background: #1A1B1E; color: #C9CCD1; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px">PCs 3</button>
+          <button type="button" style="border: 1px solid #2B2D31; background: #1A1B1E; color: #C9CCD1; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px">Portátiles 1</button>
+        </div>
+
+        <div style="background: #1A1B1E; border: 1px solid #2B2D31; border-radius: 12px; overflow-x: auto">
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px; min-width: 760px">
+            <thead>
+              <tr style="color: #9EA3AB; font-size: 12px; text-align: left">
+                <th style="padding: 12px; font-weight: 500; border-bottom: 1px solid #2B2D31">Equipo</th>
+                <th style="padding: 12px; font-weight: 500; border-bottom: 1px solid #2B2D31">Tipo</th>
+                <th style="padding: 12px; font-weight: 500; border-bottom: 1px solid #2B2D31">IP</th>
+                <th style="padding: 12px; font-weight: 500; border-bottom: 1px solid #2B2D31">Sistema</th>
+                <th style="padding: 12px; font-weight: 500; border-bottom: 1px solid #2B2D31">CPU</th>
+                <th style="padding: 12px; font-weight: 500; border-bottom: 1px solid #2B2D31">RAM</th>
+                <th style="padding: 12px; font-weight: 500; border-bottom: 1px solid #2B2D31">Disco más lleno</th>
+                <th style="padding: 12px; font-weight: 500; border-bottom: 1px solid #2B2D31">Último contacto</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{devices}}" as="d" hint-placeholder-count="6">
+                <tr style="{{d.rowStyle}}">
+                  <td style="padding: 12px; border-bottom: 1px solid #232529"><span style="display: flex; align-items: center; gap: 8px; font-weight: 600"><span style="{{d.dot}}"></span>{{d.name}}</span></td>
+                  <td style="padding: 12px; border-bottom: 1px solid #232529; color: #C9CCD1">{{d.type}}</td>
+                  <td style="padding: 12px; border-bottom: 1px solid #232529; color: #C9CCD1">{{d.ip}}</td>
+                  <td style="padding: 12px; border-bottom: 1px solid #232529; color: #C9CCD1">{{d.os}}</td>
+                  <td style="padding: 12px; border-bottom: 1px solid #232529">{{d.cpu}}</td>
+                  <td style="padding: 12px; border-bottom: 1px solid #232529">{{d.ram}}</td>
+                  <td style="padding: 12px; border-bottom: 1px solid #232529"><span style="{{d.diskStyle}}">{{d.disk}}</span></td>
+                  <td style="padding: 12px; border-bottom: 1px solid #232529; color: #C9CCD1">{{d.seen}}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <aside aria-label="Detalle de EnigmaPC" style="flex: 1 1 360px; min-width: 0; background: #1A1B1E; border: 1px solid #2B2D31; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 18px">
+        <div style="display: flex; align-items: flex-start; gap: 14px">
+          <div style="width: 56px; height: 56px; border-radius: 12px; background: #23262B; display: flex; align-items: center; justify-content: center; color: #C9CCD1; flex: none"><svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M8 20h8M12 16v4"></path></svg></div>
+          <div style="flex: 1; min-width: 0">
+            <h2 style="margin: 0; font-size: 18px; font-weight: 600">EnigmaPC</h2>
+            <p style="margin: 4px 0 0; font-size: 13px; color: #9EA3AB">ASUS · Sobremesa · Windows 10 Pro 22H2</p>
+          </div>
+          <button type="button" aria-label="Cerrar detalle" style="width: 36px; height: 36px; border-radius: 8px; border: 1px solid #2B2D31; background: none; color: #9EA3AB; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px">
+          <span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; color: #F5B942; background: #3A2E14">Aviso</span>
+          <span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; color: #3DD68C; background: #16352A">En línea · hace 1 min</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+          <div style="background: #141518; border: 1px solid #2B2D31; border-radius: 10px; padding: 12px; display: flex; align-items: center; gap: 10px">
+            <div style="position: relative; width: 56px; height: 56px; flex: none">
+              <svg viewBox="0 0 120 120" width="56" height="56" role="img" aria-label="Seguridad: 1 de 3 correctas"><circle cx="60" cy="60" r="48" fill="none" stroke="#2B2D31" stroke-width="14"></circle><circle cx="60" cy="60" r="48" fill="none" stroke="#F5B942" stroke-width="14" stroke-dasharray="100 302" transform="rotate(-90 60 60)" stroke-linecap="round"></circle></svg>
+              <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700">1/3</div>
+            </div>
+            <div style="font-size: 13px"><div style="font-weight: 600">Seguridad</div><div style="color: #9EA3AB; font-size: 12px">Actualizaciones, SO</div></div>
+          </div>
+          <div style="background: #141518; border: 1px solid #2B2D31; border-radius: 10px; padding: 12px; display: flex; align-items: center; gap: 10px">
+            <div style="position: relative; width: 56px; height: 56px; flex: none">
+              <svg viewBox="0 0 120 120" width="56" height="56" role="img" aria-label="Rendimiento: 4 de 6 correctas"><circle cx="60" cy="60" r="48" fill="none" stroke="#2B2D31" stroke-width="14"></circle><circle cx="60" cy="60" r="48" fill="none" stroke="#F5B942" stroke-width="14" stroke-dasharray="201 302" transform="rotate(-90 60 60)" stroke-linecap="round"></circle></svg>
+              <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700">4/6</div>
+            </div>
+            <div style="font-size: 13px"><div style="font-weight: 600">Rendimiento</div><div style="color: #9EA3AB; font-size: 12px">Discos C: y E:</div></div>
+          </div>
+        </div>
+
+        <dl style="margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; font-size: 13px">
+          <dt style="color: #9EA3AB">IP</dt><dd style="margin: 0">192.168.1.51 · 1 Gbps</dd>
+          <dt style="color: #9EA3AB">Usuario</dt><dd style="margin: 0">ENIGMAPC\Enigma</dd>
+          <dt style="color: #9EA3AB">CPU · RAM</dt><dd style="margin: 0">17 % · 78 % de 11,9 GB</dd>
+          <dt style="color: #9EA3AB">Antivirus</dt><dd style="margin: 0; color: #3DD68C">Defender · al día</dd>
+          <dt style="color: #9EA3AB">Actualizaciones</dt><dd style="margin: 0; color: #F5B942">Hace 58 días</dd>
+          <dt style="color: #9EA3AB">Agente</dt><dd style="margin: 0">0.1.0 · 14 MB</dd>
+        </dl>
+
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <h3 style="margin: 0; font-size: 14px; font-weight: 600">Volúmenes</h3>
+          <div style="display: flex; flex-direction: column; gap: 4px"><div style="display: flex; justify-content: space-between; font-size: 13px"><span>C:</span><span style="color: #F5B942">95 % · 12,3 GB libres</span></div><div style="height: 6px; background: #2B2D31; border-radius: 999px; overflow: hidden"><div style="height: 100%; width: 95%; background: #F5B942; border-radius: 999px"></div></div></div>
+          <div style="display: flex; flex-direction: column; gap: 4px"><div style="display: flex; justify-content: space-between; font-size: 13px"><span>E: DATA MASTER</span><span style="color: #F5B942">93 % · 29,8 GB libres</span></div><div style="height: 6px; background: #2B2D31; border-radius: 999px; overflow: hidden"><div style="height: 100%; width: 93%; background: #F5B942; border-radius: 999px"></div></div></div>
+          <div style="display: flex; flex-direction: column; gap: 4px"><div style="display: flex; justify-content: space-between; font-size: 13px"><span>H: BACKUP</span><span style="color: #3DD68C">5 % · 426,3 GB libres</span></div><div style="height: 6px; background: #2B2D31; border-radius: 999px; overflow: hidden"><div style="height: 100%; width: 5%; background: #3DD68C; border-radius: 999px"></div></div></div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <h3 style="margin: 0; font-size: 14px; font-weight: 600">Últimos eventos</h3>
+          <div style="display: flex; gap: 10px; font-size: 13px"><span style="color: #9EA3AB; width: 64px; flex: none">16:04</span><span>Reanudación</span></div>
+          <div style="display: flex; gap: 10px; font-size: 13px"><span style="color: #9EA3AB; width: 64px; flex: none">16:03</span><span>Suspensión</span></div>
+          <div style="display: flex; gap: 10px; font-size: 13px"><span style="color: #9EA3AB; width: 64px; flex: none">16:02</span><span style="color: #F5B942">Parada manual del servicio</span></div>
+        </div>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap">
+          <a href="Equipo.dc.html" style="flex: 1; text-align: center; text-decoration: none; background: #4C8DFF; color: #0B1220; border-radius: 8px; padding: 10px 14px; font-size: 13px; font-weight: 600">Abrir ficha completa</a>
+          <button type="button" style="border: 1px solid #2B2D31; background: none; color: #E7E8EA; border-radius: 8px; padding: 10px 14px; font: inherit; font-size: 13px">Copiar IP</button>
+        </div>
+      </aside>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var color = { ok: '#3DD68C', warn: '#F5B942', crit: '#F06A6A', off: '#6B7079' };
+    var dev = function (name, type, ip, os, cpu, ram, disk, dc, seen, st, selected) {
+      return {
+        name: name, type: type, ip: ip, os: os, cpu: cpu, ram: ram, disk: disk, seen: seen,
+        dot: 'width:9px;height:9px;border-radius:50%;flex:none;background:' + color[st],
+        diskStyle: 'color:' + color[dc],
+        rowStyle: selected ? 'background:#1F2A44' : ''
+      };
+    };
+    return {
+      devices: [
+        dev('EnigmaPC', 'Sobremesa', '192.168.1.51', 'Windows 10 Pro 22H2', '17 %', '78 %', 'C: 95 %', 'warn', 'hace 1 min', 'warn', true),
+        dev('PC-ALMACEN', 'Sobremesa', '192.168.1.40', 'Windows 10 Pro 22H2', '—', '—', 'C: 82 %', 'ok', 'hace 4 días', 'crit', false),
+        dev('SRV-DEMO', 'Servidor', '192.168.1.10', 'Windows Server 2022', '8 %', '54 %', 'D: 61 %', 'ok', 'hace 2 min', 'ok', false),
+        dev('PC-CONTA', 'Sobremesa', '192.168.1.34', 'Windows 11 Pro 24H2', '12 %', '66 %', 'C: 71 %', 'ok', 'hace 1 min', 'ok', false),
+        dev('PORTATIL-ANA', 'Portátil', 'remoto', 'Windows 11 Pro 24H2', '—', '—', 'C: 48 %', 'ok', 'hace 2 h · suspendido', 'off', false),
+        dev('NAS-01', 'NAS (V2)', '192.168.1.5', 'Synology DSM', '—', '—', 'Vol. 1: 74 %', 'ok', 'por SNMP en la V2', 'off', false)
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
