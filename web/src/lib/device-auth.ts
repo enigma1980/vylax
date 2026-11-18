@@ -15,7 +15,7 @@ export type AuthedDevice = {
 
 export async function authenticateDevice(
   req: NextRequest,
-): Promise<AuthedDevice | null> {
+): Promise<AuthedDevice | null | 'gone'> {
   const authHeader = req.headers.get('authorization') ?? '';
   const deviceId = req.headers.get('x-device-id') ?? '';
 
@@ -42,7 +42,8 @@ export async function authenticateDevice(
   const device = rows[0];
 
   if (!safeCompareHex(secretHash, device.credentialHash)) return null;
-  if (device.status === 'uninstalled') return null;
+  // Dispositivo desinstalado: credenciales válidas pero equipo eliminado → 410
+  if (device.status === 'uninstalled') return 'gone';
 
   return {
     id: device.id,

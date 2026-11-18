@@ -376,6 +376,10 @@ func cmdNotifyUninstall(args []string) {
 		by = collector.LoggedOnUser()
 	}
 
+	// logged_on_user es siempre la sesión activa vía WTS; initiated_by puede ser
+	// distinto si el MSI pasa --initiated-by (p.ej. la cuenta de Intune).
+	loggedOnUser := collector.LoggedOnUser()
+
 	env := &report.Envelope{
 		SchemaVersion: 1,
 		AgentVersion:  agentVersion,
@@ -385,8 +389,9 @@ func cmdNotifyUninstall(args []string) {
 			Event:      "uninstall",
 			OccurredAt: time.Now().UTC().Format(time.RFC3339),
 			Data: map[string]any{
-				"reason":       *reason,
-				"initiated_by": by,
+				"reason":          *reason,
+				"initiated_by":    by,
+				"logged_on_user":  loggedOnUser,
 			},
 		}},
 	}

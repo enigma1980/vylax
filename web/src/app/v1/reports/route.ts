@@ -269,6 +269,9 @@ async function processEvent(
 
 export async function POST(req: NextRequest) {
   const device = await authenticateDevice(req);
+  if (device === 'gone') {
+    return NextResponse.json({ error: 'equipo desinstalado' }, { status: 410 });
+  }
   if (!device) {
     return NextResponse.json({ error: 'no autorizado' }, { status: 401 });
   }

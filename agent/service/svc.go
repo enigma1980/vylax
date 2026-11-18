@@ -14,6 +14,13 @@ import (
 	"github.com/enigma1980/vylax/agent/scheduler"
 )
 
+// Constantes de eventos de energía de Windows (WM_POWERBROADCAST wParam).
+const (
+	pbtApmSuspend         = 0x0004 // PBT_APMSUSPEND: el sistema va a suspenderse
+	pbtApmResumeSuspend   = 0x0007 // PBT_APMRESUMESUSPEND: reanudación tras suspensión manual
+	pbtApmResumeAutomatic = 0x0012 // PBT_APMRESUMEAUTOMATIC: reanudación automática (inicio rápido, temporizador)
+)
+
 const (
 	ServiceName        = "VylaxAgent"
 	ServiceDisplayName = "Vylax Agent"
@@ -25,10 +32,11 @@ type vylaxSvc struct {
 	cfg      *client.LocalConfig
 	log      *logger.Logger
 	agentVer string
+	sched    *scheduler.Scheduler // asignado al inicio de Execute, antes del bucle de eventos
 }
 
 func (s *vylaxSvc) Execute(args []string, r <-chan svc.ChangeRequest, status chan<- svc.Status) (svcSpecificEC bool, exitCode uint32) {
-	const accepted = svc.AcceptStop | svc.AcceptShutdown | svc.AcceptPreShutdown
+	const accepted = svc.AcceptStop | svc.AcceptShutdown | svc.AcceptPreShutdown | svc.AcceptPowerEvent
 
 	status <- svc.Status{State: svc.StartPending}
 
@@ -40,6 +48,8 @@ func (s *vylaxSvc) Execute(args []string, r <-chan svc.ChangeRequest, status cha
 	// El handler del servicio (Execute) es el único que decide qué evento de
 	// parada se envía. El bucle Run no debe enviar nada al cancelar el contexto.
 	sched.DisableShutdownEvent()
+	// Guardar referencia antes del bucle para que el handler de POWEREVENT pueda usarla.
+	s.sched = sched
 	go func() {
 		defer close(done)
 		sched.Run(ctx)
@@ -81,6 +91,21 @@ func (s *vylaxSvc) Execute(args []string, r <-chan svc.ChangeRequest, status cha
 			saveEventToCache(s.agentVer, "shutdown")
 			cancel()
 			return false, 0
+
+		case svc.PowerEvent:
+			switch c.EventType {
+			case pbtApmSuspend:
+				// Envío rápido del evento suspend (máx 3 s) o caché si no hay red.
+				s.log.Printf("SUSPEND recibido; enviando evento suspend (máx 3 s)")
+				sendEventWithTimeout(s.hc, s.agentVer, "suspend", nil, 3*time.Second, s.log)
+			case pbtApmResumeSuspend, pbtApmResumeAutomatic:
+				// Notificar al scheduler: status inmediato + warmup 10 min para tareas pesadas.
+				s.log.Printf("RESUME recibido (tipo %d); notificando al scheduler", c.EventType)
+				if s.sched != nil {
+					s.sched.NotifyResume()
+				}
+			}
+			status <- c.CurrentStatus
 		}
 	}
 	return false, 0

@@ -4,6 +4,9 @@ import { DEFAULT_CONFIG } from '@/lib/config-defaults';
 
 export async function GET(req: NextRequest) {
   const device = await authenticateDevice(req);
+  if (device === 'gone') {
+    return NextResponse.json({ error: 'equipo desinstalado' }, { status: 410 });
+  }
   if (!device) {
     return NextResponse.json({ error: 'no autorizado' }, { status: 401 });
   }

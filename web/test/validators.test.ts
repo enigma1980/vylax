@@ -79,3 +79,46 @@ test('schema_version como entero, no string', () => {
   const result = reportEnvelopeSchema.safeParse(wrongVersion);
   assert.ok(!result.success, 'schema_version string debe fallar la validación');
 });
+
+// ---------------------------------------------------------------------------
+// Contrato v1.2: eventos de suspensión y reanudación
+// ---------------------------------------------------------------------------
+test('evento suspend pasa la validación', () => {
+  const env = {
+    schema_version: 1,
+    agent_version: '0.1.0',
+    sent_at: '2026-11-18T10:00:00Z',
+    reports: [{
+      type: 'event',
+      event: 'suspend',
+      occurred_at: '2026-11-18T10:00:00Z',
+    }],
+  };
+  const result = reportEnvelopeSchema.safeParse(env);
+  assert.ok(result.success, `evento suspend no pasa: ${JSON.stringify(result.error?.issues)}`);
+  if (result.success) {
+    const ev = result.data.reports[0];
+    assert.equal(ev.type, 'event');
+    if (ev.type === 'event') assert.equal(ev.event, 'suspend');
+  }
+});
+
+test('evento resume pasa la validación', () => {
+  const env = {
+    schema_version: 1,
+    agent_version: '0.1.0',
+    sent_at: '2026-11-18T10:05:00Z',
+    reports: [{
+      type: 'event',
+      event: 'resume',
+      occurred_at: '2026-11-18T10:05:00Z',
+    }],
+  };
+  const result = reportEnvelopeSchema.safeParse(env);
+  assert.ok(result.success, `evento resume no pasa: ${JSON.stringify(result.error?.issues)}`);
+  if (result.success) {
+    const ev = result.data.reports[0];
+    assert.equal(ev.type, 'event');
+    if (ev.type === 'event') assert.equal(ev.event, 'resume');
+  }
+});

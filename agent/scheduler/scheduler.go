@@ -67,6 +67,11 @@ type Scheduler struct {
 	// heavyResultCh recibe el resultado cuando termina.
 	heavyRunning  bool
 	heavyResultCh chan heavyResult
+
+	// resumeWarmupUntil retrasa las tareas pesadas 10 min tras una reanudación.
+	resumeWarmupUntil time.Time
+	// resumeCh recibe una señal cuando el servicio detecta PBT_APMRESUME*.
+	resumeCh chan struct{}
 }
 
 // heavyResult empaqueta los datos recogidos en segundo plano por doHeavyCollection.
@@ -93,11 +98,30 @@ func New(hc *client.Client, localCfg *client.LocalConfig, log *logger.Logger, ag
 		agentVer:      agentVer,
 		fast:          fast,
 		heavyResultCh: make(chan heavyResult, 1),
+		resumeCh:      make(chan struct{}, 1),
 	}
 	if localCfg.ConfigVersion > 0 {
 		s.srvCfg.ConfigVersion = localCfg.ConfigVersion
 	}
+	// Cargar fecha del último daily para no repetirlo si el agente se reinicia
+	// antes de que hayan pasado 24 h.
+	if ts, err := client.LoadTimestamps(); err == nil && ts != nil && ts.LastDailyAt != "" {
+		if t, err := time.Parse(time.RFC3339, ts.LastDailyAt); err == nil {
+			s.lastDailySent = t
+			log.Printf("timestamps cargados: último daily %s", t.Format(time.RFC3339))
+		}
+	}
 	return s
+}
+
+// NotifyResume señala al scheduler que el sistema ha reanudado tras una suspensión.
+// Se llama desde el handler del servicio en respuesta a PBT_APMRESUME*.
+// No bloquea: si el canal ya tiene una señal pendiente, se descarta la nueva.
+func (s *Scheduler) NotifyResume() {
+	select {
+	case s.resumeCh <- struct{}{}:
+	default:
+	}
 }
 
 // Run es el bucle principal del agente. Bloquea hasta que ctx se cancela.
@@ -184,6 +208,12 @@ func (s *Scheduler) Run(ctx context.Context) {
 				s.scheduleHeavy(ctx)
 			}
 
+		case <-s.resumeCh:
+			s.log.Printf("RESUME: enviando status inmediato y aplicando warmup de 10 min para tareas pesadas")
+			s.doSendStatus(ctx)
+			s.lastStatusSent = time.Now()
+			s.resumeWarmupUntil = time.Now().Add(10 * time.Minute)
+
 		case hr := <-s.heavyResultCh:
 			// La goroutine de recogida pesada ha terminado.
 			s.heavyRunning = false
@@ -192,6 +222,19 @@ func (s *Scheduler) Run(ctx context.Context) {
 			s.invHash = hr.invHash
 			rsp := s.doSend(ctx, []report.Report{hr.daily})
 			s.lastDailySent = time.Now()
+			// Persistir la fecha para no repetir el daily si el agente se reinicia.
+			if ts, err := client.LoadTimestamps(); err == nil {
+				if ts == nil {
+					ts = &client.Timestamps{}
+				}
+				ts.LastDailyAt = s.lastDailySent.UTC().Format(time.RFC3339)
+				if s.invData != nil {
+					ts.LastInventoryAt = s.lastDailySent.UTC().Format(time.RFC3339)
+				}
+				if err := client.SaveTimestamps(ts); err != nil {
+					s.log.Printf("advertencia: no se pudo guardar timestamps: %v", err)
+				}
+			}
 			if rsp != nil && rsp.RequestInventory && s.invData != nil {
 				s.log.Printf("servidor solicita inventario completo, enviando...")
 				s.doSend(ctx, []report.Report{s.invData})
@@ -236,8 +279,8 @@ func (s *Scheduler) Run(ctx context.Context) {
 
 			// Tarea pesada (solo tras warmup)
 			if warmupDone {
-				// ¿Toca hacer la tarea y aún no está pendiente?
-				if !s.heavyPending && time.Since(s.lastDailySent) >= dailyD {
+				// ¿Toca hacer la tarea, no está pendiente y no está ya en curso?
+				if !s.heavyPending && !s.heavyRunning && time.Since(s.lastDailySent) >= dailyD {
 					s.scheduleHeavy(ctx)
 				}
 				// ¿Está pendiente? Intentar si las condiciones se cumplen o si se pasó el plazo.
@@ -268,9 +311,12 @@ func (s *Scheduler) scheduleHeavy(ctx context.Context) {
 }
 
 // heavyReady devuelve true si las condiciones permiten ejecutar la tarea pesada:
-// no en batería y CPU < 30%.
+// no en batería, CPU < 30% y fuera del período de warmup post-resume.
 func (s *Scheduler) heavyReady() bool {
 	if s.onBattery {
+		return false
+	}
+	if !s.resumeWarmupUntil.IsZero() && time.Now().Before(s.resumeWarmupUntil) {
 		return false
 	}
 	pct := collector.QuickCPUPercent()
@@ -287,6 +333,7 @@ func (s *Scheduler) heavyReady() bool {
 // el bucle principal, donde no hay concurrencia sobre el estado del scheduler.
 func (s *Scheduler) doHeavyCollection(ctx context.Context) {
 	if s.heavyRunning {
+		s.log.Printf("AVISO: recogida pesada anterior aún en curso; omitiendo nueva solicitud")
 		return
 	}
 	s.heavyRunning = true
