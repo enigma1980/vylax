@@ -9,11 +9,15 @@ import (
 
 const TimestampsFile = `C:\ProgramData\Vylax\timestamps.json`
 
-// Timestamps guarda las fechas de la última recogida de tareas pesadas para
-// no repetirlas innecesariamente cuando el agente se reinicia.
+// Timestamps guarda las fechas de la última recogida de tareas pesadas y el
+// hash del último inventario para no perderlos entre reinicios del servicio.
 type Timestamps struct {
 	LastDailyAt     string `json:"last_daily_at,omitempty"`
 	LastInventoryAt string `json:"last_inventory_at,omitempty"`
+	// InvHash es el hash del último inventario enviado al servidor.
+	// Se persiste para que CollectStatus pueda incluirlo aunque el agente
+	// acabe de reiniciarse y aún no haya recogido el inventario completo.
+	InvHash string `json:"inv_hash,omitempty"`
 }
 
 // LoadTimestamps lee C:\ProgramData\Vylax\timestamps.json.

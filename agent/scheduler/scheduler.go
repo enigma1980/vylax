@@ -103,12 +103,20 @@ func New(hc *client.Client, localCfg *client.LocalConfig, log *logger.Logger, ag
 	if localCfg.ConfigVersion > 0 {
 		s.srvCfg.ConfigVersion = localCfg.ConfigVersion
 	}
-	// Cargar fecha del último daily para no repetirlo si el agente se reinicia
-	// antes de que hayan pasado 24 h.
-	if ts, err := client.LoadTimestamps(); err == nil && ts != nil && ts.LastDailyAt != "" {
-		if t, err := time.Parse(time.RFC3339, ts.LastDailyAt); err == nil {
-			s.lastDailySent = t
-			log.Printf("timestamps cargados: último daily %s", t.Format(time.RFC3339))
+	// Cargar timestamps persistidos: último daily y hash del inventario.
+	// Permite no repetir el daily en 24 h tras un reinicio, y enviar el
+	// inventory_hash correcto en el primer status sin esperar la recogida pesada.
+	if ts, err := client.LoadTimestamps(); err == nil && ts != nil {
+		if ts.LastDailyAt != "" {
+			if t, err := time.Parse(time.RFC3339, ts.LastDailyAt); err == nil {
+				s.lastDailySent = t
+			}
+		}
+		if ts.InvHash != "" {
+			s.invHash = ts.InvHash
+		}
+		if ts.LastDailyAt != "" || ts.InvHash != "" {
+			log.Printf("timestamps cargados (daily=%s invHash=%v)", ts.LastDailyAt, ts.InvHash != "")
 		}
 	}
 	return s
@@ -209,7 +217,8 @@ func (s *Scheduler) Run(ctx context.Context) {
 			}
 
 		case <-s.resumeCh:
-			s.log.Printf("RESUME: enviando status inmediato y aplicando warmup de 10 min para tareas pesadas")
+			s.log.Printf("RESUME: enviando evento resume + status inmediato; warmup 10 min para tareas pesadas")
+			s.sendEvent(ctx, "resume", nil)
 			s.doSendStatus(ctx)
 			s.lastStatusSent = time.Now()
 			s.resumeWarmupUntil = time.Now().Add(10 * time.Minute)
@@ -222,15 +231,15 @@ func (s *Scheduler) Run(ctx context.Context) {
 			s.invHash = hr.invHash
 			rsp := s.doSend(ctx, []report.Report{hr.daily})
 			s.lastDailySent = time.Now()
-			// Persistir la fecha para no repetir el daily si el agente se reinicia.
+			// Persistir fechas e invHash para sobrevivir reinicios del servicio.
 			if ts, err := client.LoadTimestamps(); err == nil {
 				if ts == nil {
 					ts = &client.Timestamps{}
 				}
-				ts.LastDailyAt = s.lastDailySent.UTC().Format(time.RFC3339)
-				if s.invData != nil {
-					ts.LastInventoryAt = s.lastDailySent.UTC().Format(time.RFC3339)
-				}
+				now := s.lastDailySent.UTC().Format(time.RFC3339)
+				ts.LastDailyAt = now
+				ts.LastInventoryAt = now
+				ts.InvHash = s.invHash
 				if err := client.SaveTimestamps(ts); err != nil {
 					s.log.Printf("advertencia: no se pudo guardar timestamps: %v", err)
 				}

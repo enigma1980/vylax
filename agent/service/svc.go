@@ -28,11 +28,12 @@ const (
 )
 
 type vylaxSvc struct {
-	hc       *client.Client
-	cfg      *client.LocalConfig
-	log      *logger.Logger
-	agentVer string
-	sched    *scheduler.Scheduler // asignado al inicio de Execute, antes del bucle de eventos
+	hc           *client.Client
+	cfg          *client.LocalConfig
+	log          *logger.Logger
+	agentVer     string
+	sched        *scheduler.Scheduler // asignado al inicio de Execute, antes del bucle de eventos
+	lastResumeAt time.Time            // para deduplicar PBT_APMRESUME* dentro de 60 s
 }
 
 func (s *vylaxSvc) Execute(args []string, r <-chan svc.ChangeRequest, status chan<- svc.Status) (svcSpecificEC bool, exitCode uint32) {
@@ -99,10 +100,17 @@ func (s *vylaxSvc) Execute(args []string, r <-chan svc.ChangeRequest, status cha
 				s.log.Printf("SUSPEND recibido; enviando evento suspend (máx 3 s)")
 				sendEventWithTimeout(s.hc, s.agentVer, "suspend", nil, 3*time.Second, s.log)
 			case pbtApmResumeSuspend, pbtApmResumeAutomatic:
-				// Notificar al scheduler: status inmediato + warmup 10 min para tareas pesadas.
-				s.log.Printf("RESUME recibido (tipo %d); notificando al scheduler", c.EventType)
-				if s.sched != nil {
-					s.sched.NotifyResume()
+				// Windows envía los dos avisos de reanudación (tipo 7 y 18) con pocos
+				// segundos de diferencia. Solo procesamos el primero en cada ventana de 60 s.
+				if time.Since(s.lastResumeAt) < 60*time.Second {
+					s.log.Printf("RESUME tipo %d ignorado (deduplicado; último hace %s)",
+						c.EventType, time.Since(s.lastResumeAt).Round(time.Second))
+				} else {
+					s.lastResumeAt = time.Now()
+					s.log.Printf("RESUME recibido (tipo %d); notificando al scheduler", c.EventType)
+					if s.sched != nil {
+						s.sched.NotifyResume()
+					}
 				}
 			}
 			status <- c.CurrentStatus
