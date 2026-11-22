@@ -1,318 +1,272 @@
-# Plan – Paso 5a: autenticación, sesión y organización activa
+# Plan del paso 5a — Acceso, estructura y vista general
 
-> **Alcance:** Sistema completo de login con 2FA, middleware de protección de rutas, helper
-> `getSession`, selección de organización activa, script de administración de contraseñas y dos
-> ajustes menores en `/v1/reports`. El panel propiamente dicho (vistas de equipos, clientes y
-> sedes) se abordará en el paso 5b.
+## A. Base de datos: tablas nuevas y campos
+
+**`users`** (ajustar existente; eliminar `role`):
+- `id`, `email` (único), `password_hash` (`@node-rs/argon2`)
+- `two_fa_method` (`null` | `totp` | `email`) — para email, se fija solo tras verificar el primer código
+- `totp_verified` (bool)
+- `totp_secret_encrypted` (AES-256-GCM, clave en `VYLAX_ENCRYPTION_KEY`)
+- `totp_last_step` (entero; paso de tiempo del último código TOTP aceptado, para prevenir replay)
+- `recovery_codes` (array de hashes argon2id, 8 códigos de un solo uso)
+- `email_code_hash`, `email_code_expires_at`, `email_code_attempts`
+- `password_attempts`, `password_locked_until`
+- `created_at`, `updated_at`
+
+**`user_organizations`** — relación M:N usuario ↔ organización:
+- `user_id`, `org_id`, `role` (`admin` | `technician`)
+
+**`sessions`**:
+- `id`, `token_hash` (SHA-256 del token que viaja en la cookie)
+- `user_id`, `org_id` (null hasta seleccionar organización)
+- `mfa_verified_at` — null = sesión parcial (máx. 10 min, sin acceso al panel); valor = sesión completa
+- `last_active_at`, `expires_at`, `created_at`, `ip`, `user_agent`
+- Índice único en `token_hash`
+
+**`trusted_devices`**:
+- `id`, `token_hash`, `user_id`, `created_at`, `expires_at`, `user_agent`
+- Se invalidan todas al cambiar contraseña o reiniciar 2FA
+
+**`audit_log`**:
+- `id`, `user_id` (nullable), `org_id` (nullable)
+- `event`: `login_ok`, `login_failed`, `lockout`, `2fa_ok`, `2fa_failed`, `logout`, `org_changed`, `password_changed`, `2fa_reset`
+- `ip`, `user_agent`, `metadata` (JSONB), `created_at`
+
+**`devices`**: verificar que tiene el campo `last_seen_at` y que se actualiza en cada `/v1/reports`. Si no existe, añadirlo como `TIMESTAMPTZ` actualizado al procesar cualquier informe, sin cambiar el contrato con el agente.
+
+Seed: mantiene la organización Global-Link; sin usuario ni contraseña por defecto.
 
 ---
 
-## A. Cambios en el esquema (migración)
+## B. Scripts npm
 
-### Tabla `users` — campos nuevos
+**`npm run user:create`** — `web/scripts/user-create.ts`:
+Pide por consola correo, contraseña sin eco y confirmación, organización y rol. Hashea con `@node-rs/argon2` e inserta en BD con Drizzle.
 
-| Campo | Tipo | Por qué |
-|---|---|---|
-| `two_fa_method` | `text \| null` (`'totp'` \| `'email'`) | Método de segundo factor activo; `null` = solo contraseña |
-| `totp_last_step` | `bigint \| null` | Step TOTP del último código aceptado; evita reutilizar el mismo código TOTP |
-| `email_otp_hash` | `text \| null` | Hash SHA-256 del OTP enviado por correo |
-| `email_otp_expires_at` | `timestamptz \| null` | Caducidad del OTP por correo (10 min) |
-| `password_attempts` | `integer` default `0` | Intentos fallidos consecutivos |
-| `locked_until` | `timestamptz \| null` | Si no es null, el login está bloqueado hasta esa hora |
+**`npm run user:set-password <email>`** — `web/scripts/user-set-password.ts`:
+Pide nueva contraseña sin eco y confirmación. Hashea con `@node-rs/argon2`, actualiza `password_hash`, pone `password_attempts = 0`, invalida todas las sesiones y dispositivos de confianza del usuario. Registra `password_changed` en `audit_log`. Usar también para las comprobaciones manuales de "cambio de contraseña invalida dispositivos de confianza".
 
-### Tabla `device_current_state` — campo nuevo
-
-| Campo | Tipo | Por qué |
-|---|---|---|
-| `last_seen_at` | `timestamptz \| null` | Momento del último POST /v1/reports; sirve para calcular "online" |
-
-### Acciones
-
-1. Añadir los campos a `web/src/db/schema.ts`.
-2. `npm run db:generate` → nueva migración SQL.
-3. `npm run db:migrate` → aplicar.
+**`npm run user:reset-2fa <email>`** — `web/scripts/user-reset-2fa.ts`:
+Pone `two_fa_method = null`, borra `totp_secret_encrypted`, `totp_last_step`, `recovery_codes` y `email_code_*`. Invalida todas las sesiones y dispositivos de confianza. Registra `2fa_reset` en `audit_log`.
 
 ---
 
-## B. Dependencias nuevas
+## C. Capa de acceso a datos: `lib/dal.ts`
+
+**`getSession(context)`** — `context` indica si se llama desde una página o desde un Route Handler:
+
+1. Lee la cookie `session_token`.
+2. Busca `hash(token)` en `sessions`; verifica `expires_at > now` y `last_active_at > now - 8h`.
+3. Exige `mfa_verified_at IS NOT NULL` — si null: en página → redirect a `/login/verificacion`; en Route Handler → `Response 401 JSON`.
+4. Si `org_id` es null: en página → redirect a `/login/organizacion`; en Route Handler → `Response 401 JSON`.
+5. Verifica que el usuario pertenece a esa organización.
+6. Renueva `last_active_at` en BD.
+7. Devuelve `{ userId, orgId, role }`.
+
+**`getPartialSession()`**: igual pero acepta `mfa_verified_at = null`; exige `created_at > now - 10 min`. Solo para las páginas del flujo de login.
+
+---
+
+## D. Proxy/Middleware
+
+Verificar si Next.js 16 usa `proxy.ts` en lugar de `middleware.ts`. El proxy:
+- Excluye de cualquier comprobación: `/v1/*`, `/login*`, `/api/auth/*`, `/_next/*`, `/favicon*` y estáticos.
+- Para rutas bajo `/(panel)` sin cookie `session_token`: en página → redirect a `/login`; en `/api/*` → respuesta `401 { error: "no autenticado" }` en JSON.
+- No valida el token completo; eso lo hace `lib/dal`.
+
+---
+
+## E. Flujo de autenticación
+
+### Paso 1 — `/login`
+
+`POST /api/auth/login`:
+- Si el correo no existe: esperar el mismo tiempo que si la contraseña fuera incorrecta y devolver el mismo mensaje genérico (evitar enumeración de usuarios).
+- Bloqueo: 5 intentos fallidos → `password_locked_until = now + 15 min`; registra `lockout`. El 6.º intento devuelve bloqueo incluso con contraseña correcta.
+- Éxito: pone `password_attempts = 0`. Comprueba cookie de dispositivo de confianza:
+  - Cookie válida y del mismo usuario → crea sesión completa directamente, salta 2FA; redirige al panel (o a `/login/organizacion` si tiene más de una org).
+  - Sin cookie válida → crea sesión parcial (sin `mfa_verified_at`, expira en 10 min); redirige a `/login/configurar-2fa` (si `two_fa_method = null`) o a `/login/verificacion`.
+- Registra `login_ok` o `login_failed` en `audit_log` con IP y user-agent.
+
+### Paso 2 — `/login/configurar-2fa`
+
+Requiere sesión parcial. Solo en el primer inicio de sesión (cuando `two_fa_method = null`).
+
+- Administradores: solo TOTP (obligatorio).
+- Técnicos: pueden elegir TOTP (recomendado) o código por correo.
+- **TOTP**: genera secreto con `otpauth`, cifra con AES-256-GCM (`VYLAX_ENCRYPTION_KEY`), guarda cifrado. Muestra QR + clave manual. El usuario introduce el primer código TOTP; al verificarlo se activa: se guarda `two_fa_method = 'totp'`, `totp_verified = true`, `totp_last_step = <step actual>`. Genera 8 códigos de recuperación (mostrar una vez en texto, guardar hashes argon2id).
+- **Email**: el usuario elige la opción, se envía el primer código. `two_fa_method = 'email'` se fija solo cuando el usuario verifica ese primer código correctamente en `/login/verificacion`.
+
+### Paso 3 — `/login/verificacion`
+
+Requiere sesión parcial. También se usa en logins posteriores sin dispositivo de confianza.
+
+- **TOTP**: campo de 6 dígitos. Rechaza el código si `step == totp_last_step` (previene replay). Al aceptar, actualiza `totp_last_step`. Límite: 5 intentos por sesión parcial; al superarlo, destruir sesión parcial y registrar `2fa_failed`. También acepta un código de recuperación (límite conjunto de 5 intentos; al usar uno, se borra su hash).
+- **Email**: genera código de 6 dígitos, guarda **hash** en BD; caduca en 10 min; un solo uso; máx. 5 intentos; reenvío tras 60 s. En `NODE_ENV=development` sin SMTP → `console.log`. Si era el primer login (configurando 2FA), al verificar correctamente fija `two_fa_method = 'email'`. Mismo límite de 5 intentos.
+- Checkbox "Recordar este dispositivo 30 días": crea entrada en `trusted_devices`, envía cookie adicional (httpOnly, Secure, SameSite=Strict, 30 días).
+- Éxito: actualiza `mfa_verified_at` en la sesión; registra `2fa_ok`.
+
+### Selección de organización — `/login/organizacion`
+
+Se muestra si `org_id` de la sesión es null (el usuario pertenece a más de una organización).
+
+- `POST /api/auth/org/select`: valida en servidor que el usuario pertenece a la org elegida; actualiza `org_id` en la sesión. Registra `org_changed`.
+- Si solo pertenece a una, se asigna automáticamente al crear la sesión completa.
+
+### Cookie de sesión
+
+httpOnly, Secure en producción, SameSite=Strict. Token: 32 bytes aleatorios (`crypto.randomBytes`), guardado como hash SHA-256. Caducidad: 8 h por inactividad. Al cambiar contraseña o reiniciar 2FA: revocar todas las sesiones y dispositivos de confianza del usuario.
+
+**SMTP**: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` en `.env`. Librería `nodemailer`.
+
+---
+
+## F. Estructura de rutas (App Router)
 
 ```
-npm install iron-session bcryptjs otplib nodemailer
-npm install -D @types/bcryptjs @types/nodemailer
+app/
+  (auth)/
+    login/
+      page.tsx                   ← correo + contraseña
+      verificacion/page.tsx      ← 2FA
+      configurar-2fa/page.tsx    ← configuración 2FA primer login
+      organizacion/page.tsx      ← selección de org (si > 1)
+  (panel)/
+    layout.tsx                   ← menú lateral + barra superior
+    page.tsx                     ← vista general (Server Component)
+    clientes/page.tsx            ← (5b)
+    equipos/page.tsx             ← (5b)
+    pendientes/page.tsx          ← (5b)
+    alertas/page.tsx             ← (5b)
+    ajustes/page.tsx             ← (5b)
+lib/
+  dal.ts                         ← getSession(), getPartialSession()
+  device-status.ts               ← lógica de estados de equipo
+  auth/
+    argon2.ts                    ← hash + verify
+    totp.ts                      ← generar/verificar TOTP, cifrado AES-256-GCM
+    session.ts                   ← crear/destruir sesiones en BD
+    email-code.ts                ← generar/enviar/verificar código email
+    trusted-device.ts            ← gestión cookie de dispositivo de confianza
+  mail.ts                        ← nodemailer + fallback consola
 ```
 
-| Paquete | Uso |
+---
+
+## G. Layout del panel
+
+**Colores** (de la especificación):
+- Fondo: `#0A0F1E` · Tarjetas: `#0F172A` · Bordes: `#1E293B`
+- Texto: `#E2E8F0` · Secundario: `#94A3B8` · Acento: `#818CF8`
+- Estados: verde `#34D399`, ámbar `#FBBF24`, rojo `#F87171`
+- Fuente: Inter
+
+**Menú lateral** — ancho ~220 px, fondo `#0F172A`, borde derecho `#1E293B`:
+- Logo + "Vylax" arriba.
+- Selector de organización (visible si el usuario pertenece a más de una; cambio valida pertenencia en servidor vía `POST /api/auth/org/select`, registra `org_changed`).
+- Ítems con icono SVG + texto: Vista general, Clientes, Equipos, Pendientes de asignar (badge si hay), Alertas.
+- Ajustes al fondo.
+- Ítem activo: fondo con tinte acento `#818CF8`, texto acento.
+
+**Barra superior** — fondo `#0F172A`, borde inferior `#1E293B`:
+- Buscador global (cliente, equipo o IP) → `GET /api/search?q=…`, debounce 300 ms, desplegable agrupado por tipo.
+- Icono notificaciones (sin funcionalidad en 5a).
+- Avatar con iniciales → menú: nombre/email, cerrar sesión (`POST /api/auth/logout`, destruye sesión, registra `logout`).
+
+---
+
+## H. Vista general — Server Components con `lib/dal`
+
+No hay rutas `/api/dashboard/*`. Los Server Components consultan la BD directamente a través de `lib/dal`, filtrando siempre por `orgId`.
+
+**Estados de equipo** (lógica en `lib/device-status.ts`; se evalúan en este orden):
+
+| Prioridad | Estado | Condición |
+|---|---|---|
+| 1 | `online` | `last_seen_at < 15 min` (incluye equipos que reportaron tras un resume) |
+| 2 | `unreporting` | Superado el umbral sin reportar — servidor/NAS: 10 min · Sobremesa: 3 días · Portátil: 15 días |
+| 3 | `suspended` | Último evento es `suspend` Y dentro del umbral del tipo |
+| 4 | `offline` | Dentro del umbral, sin evento `suspend` reciente |
+
+Excluidos del recuento principal: `status = 'uninstalled'`. Los `pending_assignment` van en "Pendientes de asignar".
+
+`last_seen_at` en la tabla `devices` se actualiza al procesar cualquier `/v1/reports`. Verificar que el campo ya existe y, si no, añadirlo con una migración sin cambiar el contrato con el agente.
+
+### Componentes de la vista
+
+1. **Resumen** — 4 cifras: Equipos activos, En línea, Sin reportar, Pendientes de asignar. Barra proporcional verde/gris/rojo.
+
+2. **Tarjetas de clientes** — cuadrícula `auto-fill minmax(260px, 1fr)`. Cada tarjeta:
+   - Nombre, semáforo provisional, sedes, barra en línea/total, conteo por tipo (servidores / PCs / portátiles).
+   - Botón alternar vista lista (estado local, sin servidor).
+   - Sin "alertas abiertas" (llega en paso 6). Sin "+ Nuevo cliente" (llega en 5b).
+
+3. **Semáforo provisional** (hasta paso 6):
+   - Rojo: algún servidor o NAS en `unreporting`, o algún volumen con `free_pct < 5 %`.
+   - Ámbar: cualquier otro equipo en `unreporting`, o algún volumen con `free_pct < 15 %`.
+   - Gris: sin equipos.
+   - Verde: todo lo demás.
+
+4. **Anillo "Actualizaciones al día"** — SVG inline; porcentaje calculado solo sobre equipos que tienen al menos un informe `daily`. Se excluyen del total los que nunca han enviado uno. `last_installed_at < 45 días` = al día.
+
+5. **Gráfica "En línea · 7 días"** — SVG inline; un punto por día = número de `device_id` distintos que enviaron al menos un informe (metrics o status) ese día.
+
+6. **Discos con menos espacio** — 5 volúmenes con menos espacio libre del último informe `metrics`. Tamaño en GiB (÷ 1 073 741 824) mostrado como "GB". Barra y color: rojo si `free_pct < 5 %`, ámbar si `< 15 %`.
+
+---
+
+## I. API Routes (solo auth y búsqueda)
+
+```
+POST /api/auth/login
+POST /api/auth/2fa/totp/setup      ← genera secreto y QR
+POST /api/auth/2fa/totp/verify     ← verifica primer código y activa
+POST /api/auth/2fa/email/send      ← envía código por correo
+POST /api/auth/2fa/verify          ← verifica código (TOTP, email o recuperación)
+POST /api/auth/org/select          ← asigna org activa a la sesión
+POST /api/auth/logout
+GET  /api/search?q=…
+```
+
+---
+
+## J. Librerías nuevas
+
+| Librería | Para qué |
 |---|---|
-| `iron-session` | Cookie de sesión cifrada (sin base de datos, sin JWT externo) |
-| `bcryptjs` | Hash de contraseñas (coste 12) |
-| `otplib` | Generación y verificación de TOTP |
-| `nodemailer` | Envío del OTP por correo |
+| `@node-rs/argon2` | Hash de contraseñas y códigos de recuperación |
+| `otpauth` | Generación y verificación TOTP |
+| `qrcode` | QR para configurar TOTP |
+| `nodemailer` | Envío de correos SMTP |
+| `crypto.randomBytes` (nativo) | Tokens de sesión y dispositivo |
 
-Variables de entorno nuevas en `.env.local` (y en la plantilla `.env.example`):
-
-```
-SESSION_SECRET=<32 chars aleatorios>
-SMTP_HOST=
-SMTP_PORT=587
-SMTP_USER=
-SMTP_PASS=
-SMTP_FROM="Vylax <noreply@vylax.app>"
-```
+Sin `iron-session`.
 
 ---
 
-## C. Middleware (`web/src/middleware.ts`)
-
-El middleware de Next.js se ejecuta en el edge antes de cada ruta.
-
-**Rutas excluidas (pasan sin comprobación):**
-
-- `/api/auth/*` — el sistema de login/logout en sí, no puede protegerse a sí mismo
-- `/api/v1/*` — API del agente, se autentica con Bearer token propio
-- `/login`, `/login/organizacion` — páginas públicas
-- `/_next/*`, `/favicon.ico`, archivos estáticos
-
-**Para rutas `/api/*` no excluidas:** si no hay sesión válida → `401 { "error": "no autenticado" }`.
-
-**Para páginas:** si no hay sesión → redirigir a `/login`; si hay sesión pero `org_id` es `null` → redirigir a `/login/organizacion`.
-
-```ts
-// Esqueleto
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-  if (isPublic(pathname)) return NextResponse.next();
-  const session = getIronSession(request, ...);
-  if (!session.userId) {
-    if (pathname.startsWith('/api/')) return new Response('{"error":"no autenticado"}', { status: 401 });
-    return NextResponse.redirect(new URL('/login', request.url));
-  }
-  if (!session.orgId && !pathname.startsWith('/api/')) {
-    return NextResponse.redirect(new URL('/login/organizacion', request.url));
-  }
-  return NextResponse.next();
-}
-export const config = { matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'] };
-```
-
----
-
-## D. Helper `getSession`
-
-Archivo: `web/src/lib/session.ts`
-
-Dos funciones para uso interno en Route Handlers y Server Components:
-
-```ts
-// En páginas/Server Components: lanza redirect si no autenticado
-export async function requirePageSession(): Promise<SessionData>
-
-// En Route Handlers de API protegidas: devuelve { status: 401 } si no autenticado
-export async function requireApiSession(req: Request): Promise<SessionData | Response>
-```
-
-`SessionData`:
-
-```ts
-interface SessionData {
-  userId: string;
-  email: string;
-  orgId: string | null;   // null hasta que el usuario elige organización
-  role: 'admin' | 'tech';
-  isPlatformAdmin: boolean;
-  step: 'password_ok' | 'done'; // 'password_ok' = pendiente de 2FA
-}
-```
-
-Comportamiento de `requirePageSession`:
-- Si `step === 'password_ok'` → redirigir a `/login/verify-2fa`
-- Si `orgId === null` → redirigir a `/login/organizacion`
-
----
-
-## E. Flujo de login — contraseña
-
-**Endpoint:** `POST /api/auth/login`  
-**Body:** `{ email: string, password: string }`
-
-Pasos del handler:
-
-1. Buscar el usuario por email.  
-   Si no existe → **mismo mensaje y mismo tiempo de respuesta** que si la contraseña es incorrecta  
-   (evita enumeración de usuarios). Usar `bcrypt.compare` contra un hash ficticio para igualar el tiempo.
-
-2. Comprobar `locked_until`: si está en el futuro → `429 { "error": "cuenta bloqueada", "until": "..." }`.
-
-3. Comparar contraseña con `bcrypt.compare`.  
-   - Si falla: `password_attempts += 1`; si `≥ 5` → `locked_until = NOW() + 15 min`; responder `401`.  
-   - Si ok: `password_attempts = 0`; `locked_until = null`.
-
-4. Crear sesión parcial `{ userId, email, step: 'password_ok', orgId: null, ... }`.
-
-5. Responder `200 { "next": "totp" | "email_otp" | "none" }` según `two_fa_method`.  
-   Si `"none"`, promover la sesión a `step: 'done'` antes de responder.
-
----
-
-## F. Verificación del segundo factor
-
-### TOTP
-
-**Endpoint:** `POST /api/auth/verify-2fa`  
-**Body:** `{ code: string }` (6 dígitos)
-
-1. Verificar `session.step === 'password_ok'`.
-2. Obtener `totp_secret` del usuario.
-3. `otplib.authenticator.verify({ token: code, secret })`.
-4. Calcular `currentStep = Math.floor(Date.now() / 30000)`.  
-   Si `currentStep === totp_last_step` → `401 { "error": "código ya utilizado" }` (anti-replay).
-5. Si ok: guardar `totp_last_step = currentStep`; promover sesión a `step: 'done'`.
-
-### OTP por correo
-
-1. `POST /api/auth/send-email-otp` — genera 6 dígitos, guarda `hash(code)` y `expires_at = NOW() + 10 min`, envía el correo.
-2. `POST /api/auth/verify-2fa` con `{ code }` — compara `hash(code)` con `email_otp_hash` y verifica `expires_at`.
-
-### Activación de `two_fa_method = 'email'`
-
-Solo se puede establecer `two_fa_method = 'email'` **después de que el usuario haya verificado con éxito un OTP de prueba enviado a su correo**. Flujo:
-
-1. Admin llama a `POST /api/auth/setup-email-2fa` → se envía OTP de prueba.
-2. Admin introduce el código → `POST /api/auth/confirm-email-2fa`.
-3. Solo si el código es correcto se guarda `two_fa_method = 'email'`.
-
-Esto evita que un error de configuración de correo deje al usuario sin poder entrar.
-
----
-
-## G. Gestión de sesión y organización activa
-
-### Página `/login/organizacion`
-
-- Consultar `organization_memberships` del usuario.
-- Si pertenece a **una sola organización**: redirigir directamente a `/panel` (guardar `orgId` en sesión automáticamente).
-- Si pertenece a **varias**: mostrar lista; el usuario elige.
-
-### Endpoint `POST /api/auth/set-org`
-
-```ts
-// Body: { orgId: string }
-// Verifica que el usuario pertenece a esa org; guarda orgId en la sesión.
-```
-
----
-
-## H. Script `user:set-password`
-
-Archivo: `web/scripts/set-password.ts`  
-Acceso: `npm run user:set-password -- correo@ejemplo.com`
-
-Comportamiento:
-
-1. Leer el correo como argumento de línea de comandos.
-2. Pedir la nueva contraseña **dos veces por stdin sin eco** (con `readline` en modo `mute`, o la librería `read`).
-3. Verificar que las dos entradas coinciden.
-4. Generar hash con `bcrypt` (coste 12).
-5. Actualizar `password_hash` en la base de datos.
-6. Resetear `password_attempts = 0` y `locked_until = null`.
-7. Confirmar por consola: `Contraseña actualizada para <correo>`.
-
-**Las contraseñas nunca se muestran por pantalla** (ni al escribirlas ni en ningún log).
-
----
-
-## I. `last_seen_at` y estado "online" en `/v1/reports`
-
-### `last_seen_at`
-
-Al inicio de `POST /v1/reports/route.ts`, **antes de procesar los informes**, ejecutar:
-
-```sql
-UPDATE device_current_state
-SET last_seen_at = NOW(), updated_at = NOW()
-WHERE device_id = $deviceId
-```
-
-Así `last_seen_at` siempre refleja el último contacto real con el servidor,
-independientemente de qué tipo de informe traiga el sobre.
-
-### Evaluación de "online"
-
-La función que calcula el estado del dispositivo (para el panel y el semáforo) debe **evaluar "online" primero**, antes de cualquier otra comprobación de alertas:
-
-```ts
-function computeOnline(lastSeenAt: Date | null, deviceType: string): boolean {
-  if (!lastSeenAt) return false;
-  const thresholds = { server: 10, pc: 180, laptop: 900 }; // minutos
-  const mins = thresholds[deviceType] ?? 180;
-  return (Date.now() - lastSeenAt.getTime()) < mins * 60_000;
-}
-```
-
-Si `online === false` → el estado es `offline` directamente, sin evaluar el resto de métricas.
-
----
-
-## J. Anillo/gráfico circular sin dispositivos
-
-El componente de anillo (donut chart de salud de un cliente o sede) **no se renderiza ni solicita datos al servidor** si la consulta de dispositivos activos devuelve cero resultados. En su lugar se muestra:
-
-```
-Sin dispositivos activos
-```
-
-Esto aplica también al proceso que genera el informe diario del anillo: **si no hay dispositivos, no se programa ni se ejecuta**. Evita divisiones por cero y gráficos vacíos.
-
----
-
-## K. Comprobaciones manuales
-
-Una vez implementado el paso 5a, verificar de arriba a abajo:
-
-**Middleware y protección de rutas**
-- [ ] `GET /api/datos-protegidos` sin cookie → responde `401`, no redirige
-- [ ] `GET /panel` sin cookie → redirige a `/login`
-- [ ] `GET /login` sin cookie → carga la página sin bucle de redirección
-- [ ] `POST /api/auth/login` sin cookie → no da 401 (ruta excluida del middleware)
-- [ ] `POST /v1/reports` con Bearer válido → no da 401 (ruta excluida del middleware)
-
-**Login con contraseña**
-- [ ] Correo inexistente → mismo mensaje que contraseña incorrecta, tiempo de respuesta similar
-- [ ] Contraseña incorrecta × 5 → la cuenta se bloquea; los siguientes intentos devuelven `429`
-- [ ] Login correcto → `password_attempts` vuelve a 0
-- [ ] Contraseña correcta durante bloqueo activo → sigue dando `429`
-
-**Segundo factor TOTP**
-- [ ] Código TOTP válido → sesión promovida a `step: done`
-- [ ] Mismo código TOTP dos veces seguidas → segunda vez devuelve `401 "código ya utilizado"` (`totp_last_step`)
-- [ ] Código expirado → `401`
-
-**Segundo factor por correo**
-- [ ] OTP llegado al correo → se acepta y sesión queda `done`
-- [ ] OTP caducado (> 10 min) → `401`
-- [ ] `two_fa_method = 'email'` solo se activa si el usuario verifica un OTP de prueba
-
-**`getSession` según contexto**
-- [ ] Server Component sin sesión → redirige a `/login`
-- [ ] Route Handler sin sesión → devuelve `401`
-- [ ] Sesión con `orgId = null` en página → redirige a `/login/organizacion`
-- [ ] Sesión con `orgId = null` en API → devuelve `401`
-
-**Selección de organización**
-- [ ] Usuario con 1 org → va directamente al panel sin pasar por la lista
-- [ ] Usuario con varias orgs → ve la lista y al elegir queda `orgId` guardado en sesión
-
-**Script `user:set-password`**
-- [ ] La contraseña no aparece en pantalla al escribirla
-- [ ] La contraseña no aparece en pantalla al confirmarla
-- [ ] Si las dos entradas no coinciden → error sin actualizar la BD
-- [ ] Tras ejecutarse: el usuario puede iniciar sesión con la contraseña nueva
-- [ ] `password_attempts` y `locked_until` quedan a 0 / null
-
-**`last_seen_at` y "online"**
-- [ ] Un POST a `/v1/reports` actualiza `last_seen_at` aunque los informes fallen validación
-- [ ] Dispositivo con `last_seen_at` reciente → aparece como "online" en el panel
-- [ ] Dispositivo con `last_seen_at` antiguo → aparece como "offline" sin evaluar alertas de métricas
-
-**Anillo sin dispositivos**
-- [ ] Cliente sin dispositivos activos → el panel muestra "Sin dispositivos activos", no un gráfico vacío ni un error
-- [ ] El proceso de informe diario de anillo no se ejecuta para clientes sin dispositivos
+## K. Pruebas
+
+### Tests automatizados (Jest o Vitest, en `web/`)
+
+- Bloqueo de contraseña: 5 intentos fallidos → cuenta bloqueada 15 min; 6.º intento devuelve bloqueo incluso con contraseña correcta.
+- Mismo mensaje y tiempo si el correo no existe que si la contraseña es incorrecta.
+- TOTP: código válido acepta; expirado o incorrecto rechaza; replay (mismo step) rechaza; 5 intentos en sesión parcial → sesión destruida.
+- Códigos de recuperación: uso único (el mismo código la segunda vez falla); 5 intentos → sesión parcial destruida.
+- Caducidad sesión parcial: sesión creada hace >10 min sin `mfa_verified_at` rechaza; sesión completa inactiva >8 h rechaza.
+- Aislamiento de organizaciones: usuario de org A no puede obtener datos de org B aunque se pase `org_id` de B manualmente — `lib/dal` rechaza con 401.
+- `npm test` de `/v1/*` sigue pasando sin cambios.
+
+### Comprobaciones manuales (en el sobremesa)
+
+- [ ] Login correcto con TOTP → accede al panel.
+- [ ] Login correcto con código por correo → accede al panel.
+- [ ] "Recordar dispositivo 30 días" → segundo login no pide 2FA.
+- [ ] `npm run user:set-password` → cookie de dispositivo de confianza invalida, debe pedir 2FA en el siguiente login.
+- [ ] `npm run user:create` → usuario creado puede entrar.
+- [ ] `npm run user:reset-2fa` → debe reconfigurar 2FA en el próximo login.
+- [ ] Búsqueda global devuelve cliente y equipo correcto.
+- [ ] Cambio de organización en el selector → datos cambian a la nueva org.
+- [ ] Vista general muestra semáforo rojo con servidor sin reportar.
+- [ ] Volumen con 4 % libre aparece en "Discos con menos espacio" en rojo.
+- [ ] Disco de 100 GiB con 10 GiB libres se muestra como "10 GB libres de 100 GB".
+- [ ] Equipo que reporta tras `resume` aparece como "En línea".

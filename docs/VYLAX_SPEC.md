@@ -6,7 +6,7 @@ Nov 13, 2026 · @Pepe
 
 Este documento es la fuente de verdad del proyecto: recoge todo lo analizado y decidido el 13/11/2026, antes de escribir código. Al empezar cualquier sesión nueva (con Claude o con Claude Code), hay que compartirlo y decir en qué paso del plan estamos.
 
-**Estado actual:** diseño cerrado. Siguiente paso: definir el formato JSON que envía el agente (paso 0 del plan).
+**Estado actual:** diseño y contrato de datos cerrados (16/11/2026): una sola llamada para todos los informes; con credencial revocada el agente reintenta cada 6 h. Pasos 0 a 3 completados (16/11/2026). En curso: paso 4a (comunicación del agente con la API). Hecho: subcomandos enroll/run/dump, carpeta C:\\ProgramData\\Vylax protegida con ACL por SID (solo SYSTEM y Administradores, válido en cualquier idioma), alta con reinstalación probada en tests. Parte 4a terminada el 17/11/2026. Paso 4 terminado el 18/11/2026 (detalle en el plan de trabajo). Siguiente: paso 5, el panel web. Registro histórico: parte 4b (17/11/2026): servicio VylaxAgent instalado y probado (inicio automático retrasado, recuperación tras matar el proceso, parada manual con un solo service\_stopped, desinstalación con aviso sin falsa alerta, reactivación con enroll --force, actualización sin perder el estado active, volúmenes correctos como SYSTEM, tiempos máximos por colector). Pendiente al retomar: (1) comprobar en agent\_events que al apagar el PC llegó un shutdown (puede llegar desde la caché); (2) pasar a Claude Code los ajustes finales: API responde 410 (no 401) a equipos uninstalled, recordar la fecha del último daily para no repetirlo en cada reinicio, no lanzar una recogida pesada si la anterior sigue en curso, añadir logged\_on\_user al evento uninstall. Después: npm run db:reset y paso 5 (panel). Nota: el agente debe ejecutarse como administrador; la terminal de VS Code no lo es. Nota: no borrar web\\.next con el servidor en marcha
 
 **Reglas de trabajo para Claude / Claude Code:**
 
@@ -494,7 +494,7 @@ Vylax incorporará más adelante una sonda de red, inspirada en la propuesta "So
 
 **Riesgos de la sonda a revisar antes de la V2:** licencia del feed gratuito de Greenbone para uso comercial; aparatos delicados que se cuelgan con escaneos (perfiles suaves, exclusiones, horarios pactados); seguridad del propio mini PC (disco cifrado con TPM, sin puertos de entrada); autorización de escaneo y acuerdo de encargado del tratamiento (RGPD) en el contrato; coste del hardware por cliente.
 
-## Contrato de datos agente ↔ servidor (borrador v0.1)
+## Contrato de datos agente ↔ servidor (v1.2, 18/11/2026: eventos suspend y resume; v1.1, 16/11/2026: servicios parados como objetos con tipo de inicio y código de salida; el servidor decide si alerta)
 
 El agente solo recoge y envía; **todas las alertas se evalúan en el servidor**, así que cambiar umbrales o reglas nunca obliga a actualizar el agente. La API tiene tres puntos de entrada.
 
@@ -576,7 +576,7 @@ Un sobre común y una lista de informes de distintos tipos:
   ],
   "services": {
     "critical": [ { "name": "MSSQLSERVER", "state": "running" } ],
-    "auto_not_running": [ "gupdate" ]
+    "auto_not_running": [ { "name": "gupdate", "display_name": "Google Update", "start": "delayed", "exit_code": 0 } ]
   },
   "uptime_seconds": 384213,
   "agent": { "cpu_avg_pct": 0.2, "mem_bytes": 21495808 }
@@ -649,6 +649,8 @@ El software instalado se añadirá aquí en la V2.
 
 Valores de `event`: `installed`, `started`, `upgraded`, `service_stopped`, `shutdown`, `uninstall`. En `uninstall`, `reason` es `manual` o `upgrade` (esta última no genera alerta).
 
+**v1.2 (18/11/2026):** se añaden los eventos `suspend` y `resume`. Con el inicio rápido de Windows, "apagar" no detiene los servicios y al encender no se vuelven a arrancar (comprobado: ni `shutdown` ni `started`). El agente gestiona los avisos de energía de Windows: al suspender envía `suspend` (máx. 3 s o caché); al reanudar envía `resume`, el estado de inmediato y espera 10 min antes de las tareas pesadas. El evento `uninstall` incluye también `logged_on_user`. Un equipo `uninstalled` recibe 410 en `/v1/reports` y `/v1/config`.
+
 **Respuesta de `/v1/reports`**
 
 ```json
@@ -681,17 +683,31 @@ Si `config_version` es mayor que la que tiene, el agente pide `GET /v1/config`. 
 | `429` | Espera lo que indique `Retry-After` |
 | `5xx` o sin red | Guarda en la caché (máx. 10 MB, descarta lo más antiguo) y reintenta con espera creciente |
 
+## Diseño del panel (decidido el 18/11/2026)
+
+El panel combina la estética y la ficha de equipo de la primera maqueta con la navegación inspirada en UniFi. Referencia visual: [maqueta del panel](https://claude.ai/artifact/JT4fxD69EcVcajC9FTgT1M) (copias en `docs/maquetas/` del repositorio).
+
+| Elemento | Decisión |
+| --- | --- |
+| Colores | Azul marino oscuro: fondo #0A0F1E, tarjetas #0F172A, bordes #1E293B, texto #E2E8F0, secundario #94A3B8. Acento índigo #818CF8. Estados: verde #34D399, ámbar #FBBF24, rojo #F87171. Fuente Inter |
+| Menú lateral | Con iconos y texto (Vista general, Clientes, Equipos, Pendientes de asignar, Alertas, Ajustes), selector de organización |
+| Barra superior | Buscador global (cliente, equipo o IP), notificaciones y usuario |
+| Vista general | Resumen (equipos, en línea, sin reportar, pendientes), clientes como tarjetas con opción de lista, gráfica de equipos en línea, anillo de actualizaciones al día, discos con menos espacio |
+| Vista de cliente | Pestañas (Equipos, Sedes, Tokens de alta, Ajustes), filtros rápidos, lista de equipos y panel de detalle lateral al seleccionar uno |
+| Ficha del equipo | La de la primera maqueta: anillos de seguridad y rendimiento (comprobaciones correctas, no nota inventada), gráficas de CPU y memoria, volúmenes, discos físicos, sistema y red, historial del agente, servicios parados, consumo del agente |
+| Unidades | Tamaños como Windows (GiB, mostrados como "GB") |
+
 ## Plan de trabajo
 
 Se avanza un paso cada vez y cada paso se confirma antes del siguiente. Marcar cada uno al terminarlo.
 
-- [x] **Paso 0 – Contrato de datos:** formato JSON de registro, métricas, estado, inventario y eventos del ciclo de vida.
-- [x] **Paso 1 – Estructura del proyecto:** monorepo (`agent/`, `web/`), `.gitignore`, `README.md`, módulo Go.
-- [x] **Paso 2 – Agente mínimo:** lee CPU, RAM, discos, uptime e inventario básico y los muestra por consola.
-- [ ] **Paso 3 – API:** registro por token (con bandeja de pendientes) y recepción de métricas autenticada por credencial del equipo.
-- [ ] **Paso 4 – Agente completo:** envío real, caché sin conexión, servicio de Windows, eventos de ciclo de vida, límites de consumo.
-- [ ] **Paso 5 – Panel:** login con 2FA, clientes y sedes, vista global → cliente → dispositivo, asignación de pendientes.
-- [ ] **Paso 6 – Alertas:** motor de reglas por tipo, "sin reportar", correo y webhook n8n, puntuación de salud.
+- [x] **Paso 0 – Contrato de datos:** formato JSON de registro, métricas, estado, inventario y eventos del ciclo de vida. Cerrado (v1.1) el 16/11/2026.
+- [x] **Paso 1 – Estructura del proyecto:** repositorio `vylax` (GitHub, privado) en `C:\Users\enigma\proyectos\vylax`, con `agent/`, `web/`, `docs/`, `CLAUDE.md`. Hecho el 16/11/2026.
+- [x] **Paso 2 – Agente mínimo:** prototipo que recoge metrics, status, daily e inventory y los vuelca en JSON (`--quick`, `--out`). Validado como administrador el 16/11/2026: 14 MB de RAM, 0,6 % de CPU. Problema conocido: el historial COM de Windows Update devuelve fechas no válidas; se usa Win32\_QuickFixEngineering como alternativa (revisar en el paso 4).
+- [x] **Paso 3 – API:** Next.js 16 + Drizzle + PostgreSQL 17 local (base `vylax`, usuario `vylax`). `/v1/enroll`, `/v1/reports`, `/v1/config` según contrato v1.1. Tokens y credenciales guardados como hash; reenvíos idempotentes (métricas, diarios, inventario solo si cambia el hash, incluido A→B→A). Tests: `npm test` (contrato con el JSON real del agente) y `npm run test:integration` (duplicados). `npm run db:reset` para desarrollo. Validado con el JSON real del agente el 16/11/2026. Pendiente para el paso 5: revisar la contraseña del usuario admin@vylax.local creado por el seed.
+- [ ] **Paso 4 – Agente completo:** 4a (comunicación) HECHA el 17/11/2026: subcomandos enroll/run/dump, alta con reinstalación, carpeta C:\\ProgramData\\Vylax con ACL por SID, calendario de envíos (--fast para pruebas), request\_inventory, caché sin conexión (reenvío de bytes crudos, cache\\invalid para 422) validada cortando el servidor, comprobación de permisos de administrador. 4b (servicio) HECHA el 18/11/2026: servicio VylaxAgent (inicio automático retrasado, recuperación), eventos service\_stopped / shutdown / uninstall (manual y upgrade sin falsa alerta) / suspend / resume (inicio rápido de Windows), 410 para equipos desinstalados, daily no repetido en reinicios (timestamps.json), hash de inventario estable, tiempos máximos por colector y recogida pesada en segundo plano. Pendiente solo comprobar el shutdown en un reinicio real (Reiniciar, no Apagar).
+- [ ] **Paso 5 – Panel:** login con 2FA, clientes y sedes, vista global → cliente → dispositivo, asignación de pendientes. Mostrar tamaños como Windows (GiB).
+- [ ] **Paso 6 – Alertas:** motor de reglas por tipo, condiciones sostenidas (no alertar por una sola medida), "sin reportar", correo y webhook n8n, puntuación de salud. Servicios parados con exit\_code 0 no alertan.
 - [ ] **Paso 7 – Instalador MSI:** WiX, parámetro TOKEN, aviso de desinstalación, exclusiones ESET.
 - [ ] **Paso 8 – Piloto:** un cliente con oficina, un portátil en remoto y (para V2) un NAS. Medir el consumo real del agente.
 
