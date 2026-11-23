@@ -319,13 +319,63 @@ describe('Caducidad de sesiones', { skip }, () => {
 });
 
 // ---------------------------------------------------------------------------
-// 6. Aislamiento entre organizaciones
+// 6. Aislamiento entre organizaciones — lib/dal y org/select
 // ---------------------------------------------------------------------------
 describe('Aislamiento de organizaciones', { skip }, () => {
-  // Nota: este test verifica la protección vía /api/auth/org/select.
-  // lib/dal.getSession() tiene la misma comprobación de pertenencia (eq userId+orgId
-  // en userOrganizations); se probará directamente a través de las rutas de panel
-  // que se añadan en el paso 5b/5c.
+  test('lib/dal: sesión parcial → 401 (partial_session)', async () => {
+    const user = await db.query.users.findFirst({ where: eq(schema.users.email, TEST_EMAIL_ISO) });
+    assert.ok(user);
+
+    const tokenRaw  = 'dal_partial_test_token_32bytes!x';
+    const tokenHash = createHash('sha256').update(tokenRaw).digest('hex');
+    const now       = new Date();
+    await db.insert(schema.sessions).values({
+      tokenHash,
+      userId:        user.id,
+      orgId:         null,
+      mfaVerifiedAt: null,     // sesión parcial
+      lastActiveAt:  now,
+      expiresAt:     new Date(now.getTime() + 10 * 60 * 1000),
+    });
+
+    // /api/auth/me usa getSession('route') → debe lanzar UnauthenticatedError('partial_session')
+    const res = await fetch(`http://localhost:3000/api/auth/me`, {
+      headers: { cookie: `session_token=${tokenRaw}` },
+    });
+    assert.equal(res.status, 401, 'sesión parcial rechazada por lib/dal');
+    const body = await res.json() as { error?: string };
+    assert.equal(body.error, 'partial_session', 'razón: partial_session');
+
+    await db.delete(schema.sessions).where(eq(schema.sessions.tokenHash, tokenHash));
+  });
+
+  test('lib/dal: sesión con org a la que el usuario no pertenece → 401 (forbidden)', async () => {
+    // TEST_EMAIL_ISO pertenece solo a orgId, no a orgId2
+    const user = await db.query.users.findFirst({ where: eq(schema.users.email, TEST_EMAIL_ISO) });
+    assert.ok(user);
+
+    const tokenRaw  = 'dal_forbidden_test_token_32bytesx';
+    const tokenHash = createHash('sha256').update(tokenRaw).digest('hex');
+    const now       = new Date();
+    await db.insert(schema.sessions).values({
+      tokenHash,
+      userId:        user.id,
+      orgId:         orgId2,     // org a la que NO pertenece
+      mfaVerifiedAt: now,
+      lastActiveAt:  now,
+      expiresAt:     new Date(now.getTime() + 8 * 60 * 60 * 1000),
+    });
+
+    const res = await fetch(`http://localhost:3000/api/auth/me`, {
+      headers: { cookie: `session_token=${tokenRaw}` },
+    });
+    assert.equal(res.status, 401, 'lib/dal rechaza sesión con org ajena');
+    const body = await res.json() as { error?: string };
+    assert.equal(body.error, 'forbidden', 'razón: forbidden');
+
+    await db.delete(schema.sessions).where(eq(schema.sessions.tokenHash, tokenHash));
+  });
+
   test('usuario de org A no puede seleccionar org B', async () => {
     // TEST_EMAIL_ISO pertenece solo a orgId
     const user = await db.query.users.findFirst({ where: eq(schema.users.email, TEST_EMAIL_ISO) });

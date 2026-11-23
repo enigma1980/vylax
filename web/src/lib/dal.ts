@@ -79,8 +79,8 @@ export async function getSession(context: 'page' | 'route' = 'page'): Promise<Se
 }
 
 // ---------------------------------------------------------------------------
-// getPartialSession — solo para las páginas del flujo de login (2FA, org)
-// Acepta sesiones sin mfa_verified_at pero exige que tengan menos de 10 min.
+// getPartialSession — para las páginas del flujo 2FA (mfa_verified_at puede ser null)
+// Exige que la sesión tenga menos de 10 min (aún sin verificar MFA).
 // ---------------------------------------------------------------------------
 export async function getPartialSession() {
   const session = await resolveRawSession();
@@ -89,6 +89,18 @@ export async function getPartialSession() {
 
   const ageMs = Date.now() - session.createdAt.getTime();
   if (ageMs > 10 * 60 * 1000) redirect('/login'); // sesión parcial caducada
+
+  return session;
+}
+
+// ---------------------------------------------------------------------------
+// getPostMfaSession — para /login/organizacion: MFA ya verificado, org aún no elegida.
+// ---------------------------------------------------------------------------
+export async function getPostMfaSession() {
+  const session = await resolveRawSession();
+
+  if (!session)               redirect('/login');
+  if (!session.mfaVerifiedAt) redirect('/login/verificacion');
 
   return session;
 }
