@@ -76,4 +76,18 @@ CREATE TABLE "audit_log" (
 	"metadata" jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );--> statement-breakpoint
-CREATE INDEX "audit_log_user_idx" ON "audit_log" USING btree ("user_id");
+CREATE INDEX "audit_log_user_idx" ON "audit_log" USING btree ("user_id");--> statement-breakpoint
+
+-- -------------------------------------------------------------------------
+-- 7. Claves foráneas en las tablas nuevas
+-- -------------------------------------------------------------------------
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_users_id_fk"
+  FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE CASCADE ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_org_id_organizations_id_fk"
+  FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "trusted_devices" ADD CONSTRAINT "trusted_devices_user_id_users_id_fk"
+  FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE CASCADE ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "audit_log" ADD CONSTRAINT "audit_log_user_id_users_id_fk"
+  FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "audit_log" ADD CONSTRAINT "audit_log_org_id_organizations_id_fk"
+  FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE SET NULL ON UPDATE no action;

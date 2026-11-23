@@ -343,12 +343,13 @@ export async function POST(req: NextRequest) {
   // Si en este mismo lote vino un inventory, ya no hace falta pedirlo
   if (inventoryProcessed) requestInventory = false;
 
-  // Actualizar IP pública y versión del agente en el dispositivo
+  // Actualizar IP pública, versión del agente y last_seen_at en el dispositivo
   await db
     .update(devices)
     .set({
       publicIp:     publicIp,
       agentVersion: envelope.agent_version ?? null,
+      lastSeenAt:   new Date(),
     })
     .where(eq(devices.id, device.id));
 

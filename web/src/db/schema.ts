@@ -24,8 +24,8 @@ export const sessions = pgTable(
   {
     id:            uuid('id').primaryKey().defaultRandom(),
     tokenHash:     text('token_hash').notNull(),
-    userId:        uuid('user_id').notNull(),
-    orgId:         uuid('org_id'),
+    userId:        uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    orgId:         uuid('org_id').references(() => organizations.id, { onDelete: 'set null' }),
     mfaVerifiedAt: timestamp('mfa_verified_at', { withTimezone: true }),
     lastActiveAt:  timestamp('last_active_at', { withTimezone: true }).notNull().defaultNow(),
     expiresAt:     timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -42,7 +42,7 @@ export const sessions = pgTable(
 export const trustedDevices = pgTable('trusted_devices', {
   id:        uuid('id').primaryKey().defaultRandom(),
   tokenHash: text('token_hash').notNull(),
-  userId:    uuid('user_id').notNull(),
+  userId:    uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   userAgent: text('user_agent'),
@@ -55,8 +55,8 @@ export const auditLog = pgTable(
   'audit_log',
   {
     id:        uuid('id').primaryKey().defaultRandom(),
-    userId:    uuid('user_id'),
-    orgId:     uuid('org_id'),
+    userId:    uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    orgId:     uuid('org_id').references(() => organizations.id, { onDelete: 'set null' }),
     event:     text('event').notNull(),
     // 'login_ok' | 'login_failed' | 'lockout' | '2fa_ok' | '2fa_failed'
     // | 'logout' | 'org_changed' | 'password_changed' | '2fa_reset'
