@@ -60,7 +60,9 @@ export default async function PanelLayout({ children }: { children: React.ReactN
       <div className="panel-body">
         <PanelNav pendingCount={pendingCount} />
         <main className="panel-content">
-          {children}
+          <div className="page-wrap">
+            {children}
+          </div>
         </main>
       </div>
     </div>

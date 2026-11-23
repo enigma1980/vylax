@@ -61,7 +61,7 @@ export default async function PanelHome() {
       </section>
 
       {/* Columnas: clientes + aside */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'flex-start' }}>
+      <div className="dash-cols">
 
         {/* Cuadrícula de clientes */}
         <div style={{ flex: '999 1 560px', minWidth: 0 }}>
@@ -69,7 +69,7 @@ export default async function PanelHome() {
         </div>
 
         {/* Aside: actualizaciones + gráfica + discos */}
-        <aside style={{ flex: '1 1 300px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <aside className="dash-aside">
 
           {/* Anillo actualizaciones */}
           <div style={{
