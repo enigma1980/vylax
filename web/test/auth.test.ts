@@ -185,7 +185,7 @@ describe('TOTP', { skip }, () => {
     // Generar código válido
     const totp  = new TOTP({ issuer: 'Vylax', label: '', algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(totpBase32) });
     const code  = totp.generate();
-    const resVerify = await post('/api/auth/2fa/totp/verify', { token: code }, sessionCookie);
+    const resVerify = await post('/api/auth/2fa/totp/verify', { code }, sessionCookie);
     assert.equal(resVerify.status, 200);
     const verifyBody = await resVerify.json() as { next: string; recoveryCodes: string[] };
     assert.ok(verifyBody.next, 'next presente');
@@ -222,6 +222,31 @@ describe('TOTP', { skip }, () => {
     // 6.º intento → sesión ya destruida
     const res = await post('/api/auth/2fa/verify', { code: '000000' }, cookie);
     assert.ok([401, 429].includes(res.status), 'sesión destruida');
+  });
+
+  test('totp/verify acepta { code } exactamente como lo envía la página (regresión)', async () => {
+    // Resetear el usuario para poder llamar a setup de nuevo
+    const user = await db.query.users.findFirst({ where: eq(schema.users.email, TEST_EMAIL_TOTP) });
+    if (user) {
+      await db.update(schema.users).set({ twoFaMethod: null, totpVerified: false, totpSecretEncrypted: null, totpLastStep: null, emailCodeAttempts: 0 }).where(eq(schema.users.id, user.id));
+      await db.delete(schema.sessions).where(eq(schema.sessions.userId, user.id));
+    }
+
+    const resLogin = await post('/api/auth/login', { email: TEST_EMAIL_TOTP, password: TEST_PASSWORD });
+    assert.equal(resLogin.status, 200);
+    const rawCookie = parseCookie(resLogin, 'session_token');
+    const cookie = `session_token=${rawCookie}`;
+
+    const resSetup = await post('/api/auth/2fa/totp/setup', {}, cookie);
+    assert.equal(resSetup.status, 200);
+    const { base32 } = await resSetup.json() as { base32: string };
+
+    // Exactamente el cuerpo que envía SetupForm.tsx: { code }, no { token }
+    const totp = new TOTP({ issuer: 'Vylax', label: '', algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(base32) });
+    const res  = await post('/api/auth/2fa/totp/verify', { code: totp.generate() }, cookie);
+    assert.equal(res.status, 200, 'la ruta acepta { code } como envía SetupForm.tsx');
+    const body = await res.json() as { recoveryCodes: string[] };
+    assert.ok(Array.isArray(body.recoveryCodes) && body.recoveryCodes.length === 8, '8 códigos de recuperación');
   });
 });
 
@@ -464,21 +489,19 @@ describe('Guardas de setup 2FA y restricciones de rol', { skip }, () => {
     const user = await db.query.users.findFirst({ where: eq(schema.users.email, TEST_EMAIL_ADMIN) });
     assert.ok(user);
 
-    // Crear sesión parcial manual para el admin con two_fa_method='email' (caso edge)
-    const tokenRaw  = 'admin_email_verify_test_32bytes!';
-    const tokenHash = createHash('sha256').update(tokenRaw).digest('hex');
-    const now       = new Date();
-    await db.update(schema.users).set({ twoFaMethod: 'email' }).where(eq(schema.users.id, user.id));
-    await db.insert(schema.sessions).values({
-      tokenHash, userId: user.id, orgId: null,
-      mfaVerifiedAt: null, lastActiveAt: now,
-      expiresAt: new Date(now.getTime() + 10 * 60 * 1000),
-    });
+    // Usar sesión parcial real (login) y luego forzar twoFaMethod='email' en BD
+    // (simula un admin que tenía email configurado antes de ser promovido a admin)
+    const resLogin = await post('/api/auth/login', { email: TEST_EMAIL_ADMIN, password: TEST_PASSWORD });
+    assert.equal(resLogin.status, 200, 'login del admin correcto');
+    const rawCookie = parseCookie(resLogin, 'session_token');
+    assert.ok(rawCookie, 'cookie de sesión recibida');
+    const cookie = `session_token=${rawCookie}`;
 
-    const res = await post('/api/auth/2fa/verify', { code: '000000' }, `session_token=${tokenRaw}`);
+    await db.update(schema.users).set({ twoFaMethod: 'email' }).where(eq(schema.users.id, user.id));
+
+    const res = await post('/api/auth/2fa/verify', { code: '000000' }, cookie);
     assert.equal(res.status, 403, '2fa/verify rechaza email para admin');
 
-    await db.delete(schema.sessions).where(eq(schema.sessions.tokenHash, tokenHash));
     await db.update(schema.users).set({ twoFaMethod: null }).where(eq(schema.users.id, user.id));
   });
 });

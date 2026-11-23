@@ -41,8 +41,10 @@ export function decryptTotpSecret(encrypted: string): string {
 // ---------------------------------------------------------------------------
 // TOTP
 // ---------------------------------------------------------------------------
-export function generateTotpSecret(label: string): { base32: string; uri: string } {
-  const totp = new TOTP({ issuer: 'Vylax', label, algorithm: 'SHA1', digits: 6, period: 30 });
+export function generateTotpSecret(label: string, existingBase32?: string): { base32: string; uri: string } {
+  const totp = existingBase32
+    ? new TOTP({ issuer: 'Vylax', label, algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(existingBase32) })
+    : new TOTP({ issuer: 'Vylax', label, algorithm: 'SHA1', digits: 6, period: 30 });
   return { base32: totp.secret.base32, uri: totp.toString() };
 }
 

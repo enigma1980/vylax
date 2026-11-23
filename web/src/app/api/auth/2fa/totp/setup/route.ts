@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { db } from '@/db';
 import { users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { generateTotpSecret, encryptTotpSecret } from '@/lib/auth/totp';
+import { generateTotpSecret, encryptTotpSecret, decryptTotpSecret } from '@/lib/auth/totp';
 import { SESSION_COOKIE, hashToken } from '@/lib/auth/session';
 import { sessions } from '@/db/schema';
 import QRCode from 'qrcode';
@@ -27,6 +27,15 @@ export async function POST(req: NextRequest) {
 
   if (user.twoFaMethod) {
     return NextResponse.json({ error: '2FA ya está configurado. Usa reset-2fa para cambiar el método.' }, { status: 409 });
+  }
+
+  // Si ya hay un secreto provisional (el usuario recargó la página), reutilizarlo
+  // para no invalidar lo que ya está en el autenticador.
+  if (user.totpSecretEncrypted) {
+    const existingBase32 = decryptTotpSecret(user.totpSecretEncrypted);
+    const { uri }        = generateTotpSecret(user.email, existingBase32);
+    const qrDataUrl      = await QRCode.toDataURL(uri);
+    return NextResponse.json({ qrDataUrl, uri, base32: existingBase32 });
   }
 
   const { base32, uri } = generateTotpSecret(user.email);

@@ -12,7 +12,7 @@ import { createTrustedDevice, TRUSTED_DEVICE_COOKIE } from '@/lib/auth/trusted-d
  * Activa two_fa_method='totp', genera códigos de recuperación y completa la sesión.
  */
 export async function POST(req: NextRequest) {
-  const { token: inputToken, rememberDevice } = await req.json().catch(() => ({}));
+  const { code: inputToken, rememberDevice } = await req.json().catch(() => ({}));
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE)?.value;
   if (!sessionCookie || !inputToken) return NextResponse.json({ error: 'Datos incompletos' }, { status: 400 });
