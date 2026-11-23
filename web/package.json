@@ -17,7 +17,9 @@
     "user:create": "dotenv -e .env.local -- tsx scripts/user-create.ts",
     "user:set-password": "dotenv -e .env.local -- tsx scripts/user-set-password.ts",
     "user:reset-2fa": "dotenv -e .env.local -- tsx scripts/user-reset-2fa.ts",
-    "demo:session": "dotenv -e .env.local -- tsx scripts/create-demo-session.ts"
+    "demo:session": "dotenv -e .env.local -- tsx scripts/create-demo-session.ts",
+    "dev:seed-demo": "dotenv -e .env.local -- tsx scripts/seed-demo.ts",
+    "test:dashboard": "dotenv -e .env.local -- tsx --test test/device-status.test.ts test/dashboard-isolation.test.ts"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.2",
