@@ -195,17 +195,15 @@ export async function getOverviewData(orgId: string): Promise<OverviewData> {
         .select({ id: clients.id, name: clients.name })
         .from(clients)
         .where(inArray(clients.id, clientIds)),
-      db.execute<{ client_id: string; cnt: string }>(sql`
-        SELECT client_id, COUNT(DISTINCT id)::text AS cnt
-        FROM sites
-        WHERE client_id = ANY(ARRAY[${sql.join(clientIds.map(id => sql`${id}::uuid`))}])
-        GROUP BY client_id
-      `),
+      db
+        .select({ clientId: sites.clientId, cnt: count() })
+        .from(sites)
+        .where(inArray(sites.clientId, clientIds))
+        .groupBy(sites.clientId),
     ]);
 
     const siteCountMap = new Map(
-      (siteCounts as Array<{ client_id: string; cnt: string }>)
-        .map(r => [r.client_id, Number(r.cnt)]),
+      siteCounts.map(r => [r.clientId, Number(r.cnt)]),
     );
 
     clientList = clientRows.map(c => {
