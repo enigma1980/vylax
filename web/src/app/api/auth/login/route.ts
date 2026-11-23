@@ -43,16 +43,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
   }
 
-  // Bloqueo activo
-  const now = new Date();
-  if (user.passwordLockedUntil && user.passwordLockedUntil > now) {
-    await db.insert(auditLog).values({ userId: user.id, event: 'login_failed', ip, userAgent, metadata: { reason: 'locked' } });
-    return NextResponse.json({ error: 'Cuenta bloqueada temporalmente. Inténtalo de nuevo en 15 minutos.' }, { status: 429 });
-  }
-
+  const now   = new Date();
   const valid = await verifyPassword(user.passwordHash, password).catch(() => false);
 
   if (!valid) {
+    // Si la cuenta ya está bloqueada: no revelar el bloqueo (misma respuesta que fallo normal)
+    if (user.passwordLockedUntil && user.passwordLockedUntil > now) {
+      await db.insert(auditLog).values({ userId: user.id, event: 'login_failed', ip, userAgent, metadata: { reason: 'locked_wrong_pass' } });
+      return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
+    }
+
     const attempts = user.passwordAttempts + 1;
     const lock     = attempts >= LOCK_THRESHOLD;
     await db.update(users).set({
@@ -66,6 +66,12 @@ export async function POST(req: NextRequest) {
 
     if (lock) return NextResponse.json({ error: 'Demasiados intentos fallidos. Cuenta bloqueada 15 minutos.' }, { status: 429 });
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
+  }
+
+  // Contraseña correcta: si la cuenta está bloqueada → revelar el bloqueo
+  if (user.passwordLockedUntil && user.passwordLockedUntil > now) {
+    await db.insert(auditLog).values({ userId: user.id, event: 'login_failed', ip, userAgent, metadata: { reason: 'locked' } });
+    return NextResponse.json({ error: 'Cuenta bloqueada temporalmente. Inténtalo de nuevo en 15 minutos.' }, { status: 429 });
   }
 
   // Login correcto: resetear intentos

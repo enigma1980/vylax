@@ -144,6 +144,14 @@ describe('Bloqueo de contraseña', { skip }, () => {
     const res = await post('/api/auth/login', { email: TEST_EMAIL_LOCK, password: TEST_PASSWORD });
     assert.equal(res.status, 429);
   });
+
+  test('cuenta bloqueada + contraseña incorrecta → error genérico 401 (no revela bloqueo)', async () => {
+    // La cuenta ya está bloqueada tras los tests anteriores
+    const res  = await post('/api/auth/login', { email: TEST_EMAIL_LOCK, password: 'wrongpassword' });
+    assert.equal(res.status, 401, 'debe devolver 401, no 429, para no revelar que la cuenta existe y está bloqueada');
+    const body = await res.json() as { error: string };
+    assert.equal(body.error, 'Correo o contraseña incorrectos.', 'mismo mensaje genérico');
+  });
 });
 
 // ---------------------------------------------------------------------------
