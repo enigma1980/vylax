@@ -1,72 +1,68 @@
 import { getSession } from '@/lib/dal';
 import { db } from '@/db';
-import { organizations } from '@/db/schema';
-import { eq } from 'drizzle-orm';
-import { LogoutButton } from './LogoutButton';
+import { organizations, users, userOrganizations, devices } from '@/db/schema';
+import { eq, and, count } from 'drizzle-orm';
+import { PanelNav } from './PanelNav';
+import { SearchBar } from './SearchBar';
+import { AvatarMenu } from './AvatarMenu';
 
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession('page');
 
-  const org = await db.query.organizations.findFirst({
-    where: eq(organizations.id, session.orgId),
-  });
+  const [user, org, pendingResult, orgsCount] = await Promise.all([
+    db.query.users.findFirst({ where: eq(users.id, session.userId) }),
+    db.query.organizations.findFirst({ where: eq(organizations.id, session.orgId) }),
+    db
+      .select({ n: count() })
+      .from(devices)
+      .where(and(eq(devices.organizationId, session.orgId), eq(devices.status, 'pending_assignment'))),
+    db
+      .select({ n: count() })
+      .from(userOrganizations)
+      .where(eq(userOrganizations.userId, session.userId)),
+  ]);
+
+  const pendingCount = Number(pendingResult[0]?.n ?? 0);
+  const multiOrg     = Number(orgsCount[0]?.n ?? 0) > 1;
 
   return (
     <div className="panel-wrap">
-      {/* Menú lateral provisional */}
-      <aside className="panel-sidebar">
-        <div className="panel-logo">
-          <div className="panel-logo-mark" aria-hidden="true">
-            <svg viewBox="0 0 18 18" fill="none" width="16" height="16">
-              <path d="M9 2L2 6v5c0 3.1 2.9 6 7 7 4.1-1 7-3.9 7-7V6L9 2Z" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round"/>
-              <path d="M6 9l2.5 2.5L12 7" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
+      <header className="panel-header">
+        <a href="/" className="panel-header-logo" aria-label="Inicio">
+          <svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true">
+            <rect x="1" y="1" width="26" height="26" rx="8" fill="none" stroke="#818CF8" strokeWidth="2"/>
+            <path d="M8 9l6 11 6-11" fill="none" stroke="#E2E8F0" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
           <span>Vylax</span>
-        </div>
+        </a>
 
-        <div style={{ flex: 1 }}>
-          <NavItem href="/" label="Vista general" active />
-        </div>
+        {multiOrg && (
+          <label className="org-selector-wrap">
+            Organización
+            <select defaultValue={session.orgId} aria-label="Organización activa">
+              <option value={session.orgId}>{org?.name ?? '…'}</option>
+            </select>
+          </label>
+        )}
 
-        <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-sec)', marginBottom: '0.35rem' }}>{org?.name}</div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-sec)', marginBottom: '0.75rem' }}>
-            {session.role === 'admin' ? 'Administrador' : 'Técnico'}
-          </div>
-          <LogoutButton />
-        </div>
-      </aside>
+        <SearchBar />
 
-      {/* Contenido principal */}
-      <div className="panel-main">
-        <header className="panel-topbar">
-          <span style={{ fontWeight: 500 }}>{org?.name ?? '…'}</span>
-        </header>
+        <div className="panel-header-right">
+          <button className="notif-btn" aria-label="Notificaciones">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6zM10 19a2 2 0 0 0 4 0"/>
+            </svg>
+          </button>
+          <AvatarMenu email={user?.email ?? session.userId} />
+        </div>
+      </header>
+
+      <div className="panel-body">
+        <PanelNav pendingCount={pendingCount} />
         <main className="panel-content">
           {children}
         </main>
       </div>
     </div>
-  );
-}
-
-function NavItem({ href, label, active }: { href: string; label: string; active?: boolean }) {
-  return (
-    <a
-      href={href}
-      style={{
-        display: 'flex', alignItems: 'center', gap: '0.5rem',
-        padding: '0.5rem 0.75rem', borderRadius: '6px',
-        color: active ? 'var(--accent)' : 'var(--text-sec)',
-        background: active ? 'rgba(129,140,248,0.1)' : 'transparent',
-        fontWeight: active ? 500 : 400,
-        fontSize: '0.9rem',
-        textDecoration: 'none',
-        transition: 'background 0.15s, color 0.15s',
-      }}
-    >
-      {label}
-    </a>
   );
 }

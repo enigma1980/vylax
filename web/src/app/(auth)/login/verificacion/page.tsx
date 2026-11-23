@@ -8,7 +8,7 @@ export default async function Verificacion() {
   const session = await getPartialSession();
 
   const user = await db.query.users.findFirst({ where: eq(users.id, session.userId) });
-  const method = user?.twoFaMethod ?? null;
+  const method = (user?.twoFaMethod ?? null) as 'totp' | 'email' | null;
   const email  = user?.email ?? '';
 
   return <VerifyForm method={method} email={email} />;

@@ -1,17 +1,20 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { AuthAside } from '../../AuthAside';
 
 export function VerifyForm({ method, email }: { method: 'totp' | 'email' | null; email: string }) {
-  const [code,           setCode]           = useState('');
+  const [digits,         setDigits]         = useState<string[]>(Array(6).fill(''));
   const [remember,       setRemember]       = useState(false);
   const [error,          setError]          = useState('');
   const [loading,        setLoading]        = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
-  const router = useRouter();
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>(Array(6).fill(null));
+  const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const router    = useRouter();
 
   const isEmail = method === 'email' || method === null;
+  const code    = digits.join('');
 
   function startCooldown(secs = 60) {
     setResendCooldown(secs);
@@ -24,6 +27,31 @@ export function VerifyForm({ method, email }: { method: 'totp' | 'email' | null;
   }
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
+
+  function onDigitChange(i: number, val: string) {
+    const digit = val.replace(/\D/g, '').slice(-1);
+    const next = [...digits];
+    next[i] = digit;
+    setDigits(next);
+    if (digit && i < 5) inputRefs.current[i + 1]?.focus();
+  }
+
+  function onKeyDown(i: number, e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Backspace' && !digits[i] && i > 0) {
+      inputRefs.current[i - 1]?.focus();
+    }
+  }
+
+  function onPaste(e: React.ClipboardEvent) {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    const next = [...digits];
+    for (let j = 0; j < pasted.length; j++) next[j] = pasted[j];
+    setDigits(next);
+    const nextFocus = Math.min(pasted.length, 5);
+    inputRefs.current[nextFocus]?.focus();
+  }
 
   async function resend() {
     setError('');
@@ -49,73 +77,104 @@ export function VerifyForm({ method, email }: { method: 'totp' | 'email' | null;
     finally { setLoading(false); }
   }
 
-  const methodLabel = isEmail
-    ? `Introduce el código enviado a ${email}`
-    : 'Introduce el código de tu app de autenticación';
-
-  const placeholder = method === 'totp' ? '000000 o código de recuperación' : '000000';
-
   return (
-    <main className="auth-wrap">
-      <div className="auth-card">
-        <div className="auth-logo">
-          <div className="auth-logo-mark">
-            <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
-              <path d="M9 2L2 6v5c0 3.1 2.9 6 7 7 4.1-1 7-3.9 7-7V6L9 2Z" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round"/>
-              <path d="M6 9l2.5 2.5L12 7" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <div className="auth-split">
+      <main className="auth-left">
+        <div className="auth-card">
+          <button
+            type="button"
+            className="btn-back"
+            onClick={() => router.push('/login')}
+            aria-label="Volver al inicio de sesión"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M15 6l-6 6 6 6"/>
             </svg>
+          </button>
+
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', textAlign: 'center' }}>
+            <div className="auth-icon-wrap">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/>
+              </svg>
+            </div>
+            <h1 className="auth-heading">Verificación en dos pasos</h1>
+            <p className="auth-sub" style={{ margin: 0 }}>
+              {isEmail
+                ? `Introduce el código enviado a ${email}`
+                : 'Escribe el código de 6 cifras de tu app de autenticación'}
+            </p>
           </div>
-          <span className="auth-logo-text">Vylax</span>
+
+          <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
+              <legend style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden' }}>
+                Código de verificación
+              </legend>
+              <div className="otp-grid" onPaste={onPaste}>
+                {digits.map((d, i) => (
+                  <input
+                    key={i}
+                    ref={el => { inputRefs.current[i] = el; }}
+                    aria-label={`Cifra ${i + 1}`}
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={d}
+                    onChange={e => onDigitChange(i, e.target.value)}
+                    onKeyDown={e => onKeyDown(i, e)}
+                    className={`otp-digit${d ? ' filled' : ''}`}
+                    autoFocus={i === 0}
+                    autoComplete={i === 0 ? 'one-time-code' : 'off'}
+                  />
+                ))}
+              </div>
+            </fieldset>
+
+            <label className="check-row">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={e => setRemember(e.target.checked)}
+              />
+              <span>Recordar este dispositivo 30 días</span>
+            </label>
+
+            <button type="submit" className="btn btn-indigo" disabled={loading || code.length < 6}>
+              {loading ? 'Verificando…' : 'Verificar'}
+            </button>
+          </form>
+
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: '18px', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '14px', textAlign: 'center' }}>
+            {isEmail ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ width: '100%' }}
+                onClick={resend}
+                disabled={resendCooldown > 0 || loading}
+              >
+                {resendCooldown > 0 ? `Reenviar en ${resendCooldown}s` : 'Enviarme un código por correo'}
+              </button>
+            ) : (
+              <a href="#" style={{ color: 'var(--accent-lt)', textDecoration: 'none' }}>
+                Enviarme un código por correo
+              </a>
+            )}
+            <a href="#" style={{ color: 'var(--text-sec)', textDecoration: 'none', fontSize: '13px' }}>
+              Usar un código de recuperación
+            </a>
+          </div>
+
+          {error && <p className="form-error">{error}</p>}
         </div>
 
-        <h1 className="auth-heading">Verificación en dos pasos</h1>
-        <p className="auth-sub">{methodLabel}</p>
+        <div className="auth-footer">
+          <a href="#">Condiciones del servicio</a>
+          <a href="#">Privacidad</a>
+        </div>
+      </main>
 
-        <form onSubmit={submit}>
-          <div className="form-field">
-            <label htmlFor="code">
-              {isEmail ? 'Código de 6 dígitos' : 'Código TOTP o de recuperación'}
-            </label>
-            <input
-              id="code" type="text" inputMode="numeric"
-              className={`inp${method === 'totp' ? '' : ' inp-otp'}`}
-              placeholder={placeholder} maxLength={method === 'totp' ? 20 : 6}
-              value={code} onChange={e => setCode(e.target.value.trim())}
-              autoComplete="one-time-code" autoFocus required
-            />
-          </div>
-
-          <div className="check-row">
-            <input
-              id="remember" type="checkbox"
-              checked={remember} onChange={e => setRemember(e.target.checked)}
-            />
-            <label htmlFor="remember">Recordar este dispositivo durante 30 días</label>
-          </div>
-
-          <button type="submit" className="btn btn-primary" disabled={loading}>
-            {loading ? 'Verificando…' : 'Verificar'}
-          </button>
-        </form>
-
-        {isEmail && (
-          <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <button
-              className="btn btn-ghost"
-              onClick={resend}
-              disabled={resendCooldown > 0 || loading}
-              style={{ flex: '0 0 auto' }}
-            >
-              Reenviar código
-            </button>
-            {resendCooldown > 0 && (
-              <span className="form-info">({resendCooldown}s)</span>
-            )}
-          </div>
-        )}
-
-        {error && <p className="form-error" style={{ marginTop: '0.75rem' }}>{error}</p>}
-      </div>
-    </main>
+      <AuthAside />
+    </div>
   );
 }

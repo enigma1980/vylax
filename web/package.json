@@ -12,6 +12,7 @@
     "test": "tsx --test test/validators.test.ts",
     "test:integration": "dotenv -e .env.local -- tsx --test test/idempotency.test.ts",
     "test:auth": "dotenv -e .env.local -- tsx --test test/auth.test.ts",
+    "test:search": "dotenv -e .env.local -- tsx --test test/search.test.ts",
     "db:reset": "dotenv -e .env.local -- tsx scripts/reset.ts",
     "user:create": "dotenv -e .env.local -- tsx scripts/user-create.ts",
     "user:set-password": "dotenv -e .env.local -- tsx scripts/user-set-password.ts",
