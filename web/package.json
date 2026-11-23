@@ -11,9 +11,13 @@
     "db:seed": "dotenv -e .env.local -- tsx scripts/seed.ts",
     "test": "tsx --test test/validators.test.ts",
     "test:integration": "dotenv -e .env.local -- tsx --test test/idempotency.test.ts",
-    "db:reset": "dotenv -e .env.local -- tsx scripts/reset.ts"
+    "db:reset": "dotenv -e .env.local -- tsx scripts/reset.ts",
+    "user:create": "dotenv -e .env.local -- tsx scripts/user-create.ts",
+    "user:set-password": "dotenv -e .env.local -- tsx scripts/user-set-password.ts",
+    "user:reset-2fa": "dotenv -e .env.local -- tsx scripts/user-reset-2fa.ts"
   },
   "dependencies": {
+    "@node-rs/argon2": "^2.2.2",
     "drizzle-orm": "0.45.4",
     "next": "16.4.6",
     "postgres": "4.1.1",
