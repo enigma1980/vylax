@@ -44,12 +44,14 @@ function parseCookie(res: Response, name: string): string | null {
 // ---------------------------------------------------------------------------
 // Fixture
 // ---------------------------------------------------------------------------
-const TEST_EMAIL_LOCK   = 'test_lockout@test.vylax';
-const TEST_EMAIL_TOTP   = 'test_totp@test.vylax';
-const TEST_EMAIL_RECOV  = 'test_recovery@test.vylax';
-const TEST_EMAIL_EXPIRY = 'test_expiry@test.vylax';
-const TEST_EMAIL_ISO    = 'test_isolation@test.vylax';
-const TEST_PASSWORD     = 'TestPassword2026!!';
+const TEST_EMAIL_LOCK    = 'test_lockout@test.vylax';
+const TEST_EMAIL_TOTP    = 'test_totp@test.vylax';
+const TEST_EMAIL_RECOV   = 'test_recovery@test.vylax';
+const TEST_EMAIL_EXPIRY  = 'test_expiry@test.vylax';
+const TEST_EMAIL_ISO     = 'test_isolation@test.vylax';
+const TEST_EMAIL_ADMIN   = 'test_admin@test.vylax';     // admin → no puede usar email 2FA
+const TEST_EMAIL_TECH    = 'test_tech_email@test.vylax'; // technician con twoFaMethod configurado
+const TEST_PASSWORD      = 'TestPassword2026!!';
 
 let orgId: string;
 let orgId2: string;
@@ -87,11 +89,31 @@ before(async () => {
   await ensureUser(TEST_EMAIL_RECOV);
   await ensureUser(TEST_EMAIL_EXPIRY);
   await ensureUser(TEST_EMAIL_ISO);  // solo en orgId (no en orgId2)
+
+  // Usuario administrador (solo TOTP)
+  const existingAdmin = await db.query.users.findFirst({ where: eq(schema.users.email, TEST_EMAIL_ADMIN) });
+  if (existingAdmin) {
+    await db.update(schema.users).set({ passwordAttempts: 0, passwordLockedUntil: null, emailCodeAttempts: 0, twoFaMethod: null }).where(eq(schema.users.id, existingAdmin.id));
+    await db.delete(schema.sessions).where(eq(schema.sessions.userId, existingAdmin.id));
+  } else {
+    const [u] = await db.insert(schema.users).values({ email: TEST_EMAIL_ADMIN, passwordHash }).returning({ id: schema.users.id });
+    await db.insert(schema.userOrganizations).values({ userId: u.id, orgId, role: 'admin' });
+  }
+
+  // Usuario técnico para tests de idempotencia de setup
+  const existingTech = await db.query.users.findFirst({ where: eq(schema.users.email, TEST_EMAIL_TECH) });
+  if (existingTech) {
+    await db.update(schema.users).set({ passwordAttempts: 0, passwordLockedUntil: null, emailCodeAttempts: 0, twoFaMethod: null, totpVerified: false, totpSecretEncrypted: null }).where(eq(schema.users.id, existingTech.id));
+    await db.delete(schema.sessions).where(eq(schema.sessions.userId, existingTech.id));
+  } else {
+    const [u] = await db.insert(schema.users).values({ email: TEST_EMAIL_TECH, passwordHash }).returning({ id: schema.users.id });
+    await db.insert(schema.userOrganizations).values({ userId: u.id, orgId, role: 'technician' });
+  }
 });
 
 after(async () => {
   if (skip || !client) return;
-  for (const email of [TEST_EMAIL_LOCK, TEST_EMAIL_TOTP, TEST_EMAIL_RECOV, TEST_EMAIL_EXPIRY, TEST_EMAIL_ISO]) {
+  for (const email of [TEST_EMAIL_LOCK, TEST_EMAIL_TOTP, TEST_EMAIL_RECOV, TEST_EMAIL_EXPIRY, TEST_EMAIL_ISO, TEST_EMAIL_ADMIN, TEST_EMAIL_TECH]) {
     const u = await db.query.users.findFirst({ where: eq(schema.users.email, email) });
     if (u) {
       await db.delete(schema.sessions).where(eq(schema.sessions.userId, u.id));
@@ -300,6 +322,10 @@ describe('Caducidad de sesiones', { skip }, () => {
 // 6. Aislamiento entre organizaciones
 // ---------------------------------------------------------------------------
 describe('Aislamiento de organizaciones', { skip }, () => {
+  // Nota: este test verifica la protección vía /api/auth/org/select.
+  // lib/dal.getSession() tiene la misma comprobación de pertenencia (eq userId+orgId
+  // en userOrganizations); se probará directamente a través de las rutas de panel
+  // que se añadan en el paso 5b/5c.
   test('usuario de org A no puede seleccionar org B', async () => {
     // TEST_EMAIL_ISO pertenece solo a orgId
     const user = await db.query.users.findFirst({ where: eq(schema.users.email, TEST_EMAIL_ISO) });
@@ -323,5 +349,86 @@ describe('Aislamiento de organizaciones', { skip }, () => {
     assert.equal(res.status, 403, 'acceso denegado a org ajena');
 
     await db.delete(schema.sessions).where(eq(schema.sessions.tokenHash, tokenHash));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. Guardas de setup y restricciones de rol
+// ---------------------------------------------------------------------------
+describe('Guardas de setup 2FA y restricciones de rol', { skip }, () => {
+  // Helper: hace login y devuelve la cookie de sesión parcial
+  async function loginPartial(email: string): Promise<string> {
+    const res = await post('/api/auth/login', { email, password: TEST_PASSWORD });
+    assert.equal(res.status, 200, `login de ${email} debe ir bien`);
+    const setCookie = res.headers.get('set-cookie') ?? '';
+    const match = setCookie.match(/session_token=([^;]+)/);
+    assert.ok(match, 'cookie de sesión parcial');
+    return `session_token=${match![1]}`;
+  }
+
+  test('totp/setup rechaza si ya tiene two_fa_method', async () => {
+    const user = await db.query.users.findFirst({ where: eq(schema.users.email, TEST_EMAIL_TECH) });
+    assert.ok(user);
+
+    // Simular que ya tiene TOTP configurado
+    await db.update(schema.users)
+      .set({ twoFaMethod: 'totp', totpVerified: true, totpSecretEncrypted: 'dummy' })
+      .where(eq(schema.users.id, user.id));
+
+    const cookie = await loginPartial(TEST_EMAIL_TECH);
+    const res    = await post('/api/auth/2fa/totp/setup', {}, cookie);
+    assert.equal(res.status, 409, 'setup rechaza si ya hay método configurado');
+
+    // Limpiar para no afectar otros tests
+    await db.update(schema.users)
+      .set({ twoFaMethod: null, totpVerified: false, totpSecretEncrypted: null })
+      .where(eq(schema.users.id, user.id));
+  });
+
+  test('email/send rechaza a administradores', async () => {
+    const cookie = await loginPartial(TEST_EMAIL_ADMIN);
+    const res    = await post('/api/auth/2fa/email/send', {}, cookie);
+    assert.equal(res.status, 403, 'admin no puede usar 2FA por correo');
+  });
+
+  test('email/send respeta rate limit de 60 s', async () => {
+    // Reiniciar usuario técnico sin two_fa_method
+    const user = await db.query.users.findFirst({ where: eq(schema.users.email, TEST_EMAIL_TECH) });
+    assert.ok(user);
+    await db.update(schema.users)
+      .set({ twoFaMethod: null, emailCodeHash: null, emailCodeExpiresAt: null, emailCodeAttempts: 0 })
+      .where(eq(schema.users.id, user.id));
+
+    const cookie = await loginPartial(TEST_EMAIL_TECH);
+
+    // Primer envío → debe funcionar
+    const res1 = await post('/api/auth/2fa/email/send', {}, cookie);
+    assert.equal(res1.status, 200, 'primer envío OK');
+
+    // Segundo envío inmediato → rate limit
+    const res2 = await post('/api/auth/2fa/email/send', {}, cookie);
+    assert.equal(res2.status, 429, 'reenvío inmediato rechazado por rate limit');
+  });
+
+  test('2fa/verify rechaza email para administradores', async () => {
+    const user = await db.query.users.findFirst({ where: eq(schema.users.email, TEST_EMAIL_ADMIN) });
+    assert.ok(user);
+
+    // Crear sesión parcial manual para el admin con two_fa_method='email' (caso edge)
+    const tokenRaw  = 'admin_email_verify_test_32bytes!';
+    const tokenHash = createHash('sha256').update(tokenRaw).digest('hex');
+    const now       = new Date();
+    await db.update(schema.users).set({ twoFaMethod: 'email' }).where(eq(schema.users.id, user.id));
+    await db.insert(schema.sessions).values({
+      tokenHash, userId: user.id, orgId: null,
+      mfaVerifiedAt: null, lastActiveAt: now,
+      expiresAt: new Date(now.getTime() + 10 * 60 * 1000),
+    });
+
+    const res = await post('/api/auth/2fa/verify', { code: '000000' }, `session_token=${tokenRaw}`);
+    assert.equal(res.status, 403, '2fa/verify rechaza email para admin');
+
+    await db.delete(schema.sessions).where(eq(schema.sessions.tokenHash, tokenHash));
+    await db.update(schema.users).set({ twoFaMethod: null }).where(eq(schema.users.id, user.id));
   });
 });

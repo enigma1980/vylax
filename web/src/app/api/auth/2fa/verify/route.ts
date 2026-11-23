@@ -67,6 +67,11 @@ export async function POST(req: NextRequest) {
       }
     }
   } else if (method === 'email') {
+    // Los administradores no pueden usar el método correo (defensa en profundidad)
+    const memberships = await db.query.userOrganizations.findMany({ where: eq(userOrganizations.userId, user.id) });
+    if (memberships.some(m => m.role === 'admin')) {
+      return NextResponse.json({ error: 'Los administradores deben usar TOTP.' }, { status: 403 });
+    }
     const result = await verifyEmailCode(user.id, String(code));
     valid = result === 'ok';
     if (!valid) {

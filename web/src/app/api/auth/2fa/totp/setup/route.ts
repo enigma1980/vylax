@@ -25,6 +25,10 @@ export async function POST(req: NextRequest) {
   const user = await db.query.users.findFirst({ where: eq(users.id, session.userId) });
   if (!user) return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 });
 
+  if (user.twoFaMethod) {
+    return NextResponse.json({ error: '2FA ya está configurado. Usa reset-2fa para cambiar el método.' }, { status: 409 });
+  }
+
   const { base32, uri } = generateTotpSecret(user.email);
   const encrypted       = encryptTotpSecret(base32);
 

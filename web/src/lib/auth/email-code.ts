@@ -26,6 +26,14 @@ export async function sendEmailCode(toEmail: string, code: string): Promise<void
   });
 }
 
+/** Devuelve true si el último código fue generado hace < 60 s (rate limit de reenvío). */
+export async function isEmailCodeRateLimited(userId: string): Promise<boolean> {
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user?.emailCodeExpiresAt) return false;
+  const generatedMs = user.emailCodeExpiresAt.getTime() - CODE_EXPIRY_MS;
+  return Date.now() - generatedMs < RESEND_WAIT_MS;
+}
+
 type VerifyResult = 'ok' | 'invalid' | 'expired' | 'too_many_attempts';
 
 export async function verifyEmailCode(userId: string, inputCode: string): Promise<VerifyResult> {
