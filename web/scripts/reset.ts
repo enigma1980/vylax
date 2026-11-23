@@ -1,10 +1,13 @@
 /**
- * Script de desarrollo: vacía todas las tablas y vuelve a ejecutar el seed.
+ * Script de desarrollo: destruye el esquema completo, aplica todas las
+ * migraciones y vuelve a ejecutar el seed.
  * NO funciona si NODE_ENV=production.
  * Uso: npm run db:reset
  */
+import path from 'path';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
+import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import * as schema from '../src/db/schema';
 import {
   generateEnrollmentToken,
@@ -17,19 +20,21 @@ if (process.env.NODE_ENV === 'production') {
   process.exit(1);
 }
 
-// onnotice: suppress the TRUNCATE cascade NOTICEs
 const client = postgres(process.env.DATABASE_URL!, { onnotice: () => {} });
 const db = drizzle(client, { schema });
 
 async function main() {
-  console.log('\n⚠  Vaciando todas las tablas...\n');
+  console.log('\n⚠  Destruyendo esquemas...\n');
+  await client`DROP SCHEMA IF EXISTS public CASCADE`;
+  await client`DROP SCHEMA IF EXISTS drizzle CASCADE`;
+  await client`CREATE SCHEMA public`;
+  console.log('OK  Esquemas vaciados.');
 
-  // TRUNCATE + CASCADE borra en cascada todas las tablas dependientes.
-  // Las UUIDs se generan con gen_random_uuid(), no con secuencias,
-  // por lo que RESTART IDENTITY no tiene efecto aquí pero no daña.
-  await client`TRUNCATE organizations, users RESTART IDENTITY CASCADE`;
-
-  console.log('OK  Tablas vaciadas.');
+  console.log('\n▶  Aplicando migraciones...\n');
+  await migrate(db, {
+    migrationsFolder: path.join(__dirname, '../src/db/migrations'),
+  });
+  console.log('OK  Migraciones aplicadas.');
 
   // --- Seed -----------------------------------------------------------------
   const [org] = await db
@@ -60,12 +65,7 @@ async function main() {
     label: 'Token desarrollo',
   });
 
-  const passwordHash = sha256hex('Vylax_Dev_2026!');
-  await db
-    .insert(schema.users)
-    .values({ email: 'admin@vylax.local', passwordHash, isPlatformAdmin: true })
-    .onConflictDoNothing();
-  console.log('OK  Admin:        admin@vylax.local');
+  console.log('OK  Sin usuario por defecto. Usa npm run user:create para crear uno.');
 
   console.log('\n' + '='.repeat(60));
   console.log('  TOKEN DE ALTA (solo se muestra ahora)');

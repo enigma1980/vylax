@@ -1,7 +1,7 @@
 /**
  * Script de semilla para desarrollo.
- * Crea: organización Global-Link, cliente Demo, sede Sede Principal,
- * un token de alta y un usuario administrador de plataforma.
+ * Crea: organización Global-Link, cliente Demo, sede Sede Principal y un token de alta.
+ * Sin usuario por defecto; usar npm run user:create para crear el primer usuario.
  *
  * Uso: npm run db:seed
  */
@@ -17,11 +17,6 @@ import {
 
 const client = postgres(process.env.DATABASE_URL!);
 const db = drizzle(client, { schema });
-
-// Contraseña de prueba para el admin de plataforma.
-// IMPORTANTE: en producción usar bcrypt/argon2; aquí SHA-256 es suficiente para el seed.
-const ADMIN_EMAIL    = 'admin@vylax.local';
-const ADMIN_PASSWORD = 'Vylax_Dev_2026!';
 
 async function main() {
   console.log('▶  Iniciando seed...\n');
@@ -72,18 +67,6 @@ async function main() {
     tokenPrefix: prefix,
     label: 'Token desarrollo',
   });
-
-  // Usuario administrador de plataforma
-  const passwordHash = sha256hex(ADMIN_PASSWORD);
-  await db
-    .insert(schema.users)
-    .values({
-      email: ADMIN_EMAIL,
-      passwordHash,
-      isPlatformAdmin: true,
-    })
-    .onConflictDoNothing();
-  console.log('✔  Usuario admin:', ADMIN_EMAIL);
 
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('  TOKEN DE ALTA (solo se muestra ahora)');

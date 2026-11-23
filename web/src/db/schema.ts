@@ -17,6 +17,58 @@ import {
 import { relations } from 'drizzle-orm';
 
 // ---------------------------------------------------------------------------
+// Sesiones de usuario
+// ---------------------------------------------------------------------------
+export const sessions = pgTable(
+  'sessions',
+  {
+    id:            uuid('id').primaryKey().defaultRandom(),
+    tokenHash:     text('token_hash').notNull(),
+    userId:        uuid('user_id').notNull(),
+    orgId:         uuid('org_id'),
+    mfaVerifiedAt: timestamp('mfa_verified_at', { withTimezone: true }),
+    lastActiveAt:  timestamp('last_active_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt:     timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt:     timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    ip:            text('ip'),
+    userAgent:     text('user_agent'),
+  },
+  (t) => [uniqueIndex('sessions_token_hash_idx').on(t.tokenHash)],
+);
+
+// ---------------------------------------------------------------------------
+// Dispositivos de confianza (cookie "recordar 30 días")
+// ---------------------------------------------------------------------------
+export const trustedDevices = pgTable('trusted_devices', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tokenHash: text('token_hash').notNull(),
+  userId:    uuid('user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  userAgent: text('user_agent'),
+});
+
+// ---------------------------------------------------------------------------
+// Registro de auditoría de accesos y cambios de configuración
+// ---------------------------------------------------------------------------
+export const auditLog = pgTable(
+  'audit_log',
+  {
+    id:        uuid('id').primaryKey().defaultRandom(),
+    userId:    uuid('user_id'),
+    orgId:     uuid('org_id'),
+    event:     text('event').notNull(),
+    // 'login_ok' | 'login_failed' | 'lockout' | '2fa_ok' | '2fa_failed'
+    // | 'logout' | 'org_changed' | 'password_changed' | '2fa_reset'
+    ip:        text('ip'),
+    userAgent: text('user_agent'),
+    metadata:  jsonb('metadata'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('audit_log_user_idx').on(t.userId)],
+);
+
+// ---------------------------------------------------------------------------
 // Timestamps UTC
 // ---------------------------------------------------------------------------
 const tstz = (name: string) => timestamp(name, { withTimezone: true });
@@ -35,26 +87,35 @@ export const organizations = pgTable('organizations', {
 // Usuarios de la plataforma
 // ---------------------------------------------------------------------------
 export const users = pgTable('users', {
-  id:              uuid('id').primaryKey().defaultRandom(),
-  email:           text('email').notNull().unique(),
-  passwordHash:    text('password_hash').notNull(),
-  totpSecret:      text('totp_secret'),
-  isPlatformAdmin: boolean('is_platform_admin').notNull().default(false),
-  createdAt:       tstz('created_at').notNull().defaultNow(),
+  id:                    uuid('id').primaryKey().defaultRandom(),
+  email:                 text('email').notNull().unique(),
+  passwordHash:          text('password_hash').notNull(),
+  twoFaMethod:           text('two_fa_method'),          // null | 'totp' | 'email'
+  totpVerified:          boolean('totp_verified').notNull().default(false),
+  totpSecretEncrypted:   text('totp_secret_encrypted'),  // AES-256-GCM, clave en VYLAX_ENCRYPTION_KEY
+  totpLastStep:          integer('totp_last_step'),      // paso de tiempo del último código TOTP aceptado
+  recoveryCodes:         jsonb('recovery_codes'),        // array de hashes argon2id
+  emailCodeHash:         text('email_code_hash'),
+  emailCodeExpiresAt:    tstz('email_code_expires_at'),
+  emailCodeAttempts:     integer('email_code_attempts').notNull().default(0),
+  passwordAttempts:      integer('password_attempts').notNull().default(0),
+  passwordLockedUntil:   tstz('password_locked_until'),
+  createdAt:             tstz('created_at').notNull().defaultNow(),
+  updatedAt:             tstz('updated_at').notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
-// Pertenencia de usuarios a organizaciones
+// Relación M:N usuario ↔ organización
 // ---------------------------------------------------------------------------
-export const organizationMemberships = pgTable(
-  'organization_memberships',
+export const userOrganizations = pgTable(
+  'user_organizations',
   {
-    userId:         uuid('user_id').notNull().references(() => users.id),
-    organizationId: uuid('organization_id').notNull().references(() => organizations.id),
-    role:           text('role').notNull(), // 'admin' | 'tech'
-    createdAt:      tstz('created_at').notNull().defaultNow(),
+    userId: uuid('user_id').notNull().references(() => users.id),
+    orgId:  uuid('org_id').notNull().references(() => organizations.id),
+    role:   text('role').notNull(), // 'admin' | 'technician'
+    createdAt: tstz('created_at').notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.userId, t.organizationId] })],
+  (t) => [primaryKey({ columns: [t.userId, t.orgId] })],
 );
 
 // ---------------------------------------------------------------------------
@@ -124,6 +185,7 @@ export const devices = pgTable(
     agentVersion:       text('agent_version'),
     createdAt:          tstz('created_at').notNull().defaultNow(),
     uninstalledAt:      tstz('uninstalled_at'),
+    lastSeenAt:         tstz('last_seen_at'),
   },
   (t) => [
     index('devices_org_idx').on(t.organizationId),
@@ -312,7 +374,7 @@ export const findings = pgTable(
 // Relaciones (necesarias para db.query.xxx)
 // ---------------------------------------------------------------------------
 export const organizationsRelations = relations(organizations, ({ many }) => ({
-  memberships: many(organizationMemberships),
+  memberships: many(userOrganizations),
   clients:     many(clients),
   tokens:      many(enrollmentTokens),
   devices:     many(devices),
