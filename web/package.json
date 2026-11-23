@@ -16,7 +16,8 @@
     "db:reset": "dotenv -e .env.local -- tsx scripts/reset.ts",
     "user:create": "dotenv -e .env.local -- tsx scripts/user-create.ts",
     "user:set-password": "dotenv -e .env.local -- tsx scripts/user-set-password.ts",
-    "user:reset-2fa": "dotenv -e .env.local -- tsx scripts/user-reset-2fa.ts"
+    "user:reset-2fa": "dotenv -e .env.local -- tsx scripts/user-reset-2fa.ts",
+    "demo:session": "dotenv -e .env.local -- tsx scripts/create-demo-session.ts"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.2",
