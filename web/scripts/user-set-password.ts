@@ -1,6 +1,6 @@
 /**
- * Cambia la contraseña de un usuario, invalida todas sus sesiones y
- * dispositivos de confianza, y registra el evento en audit_log.
+ * Cambia la contraseña de un usuario: hashea con argon2id, resetea intentos
+ * y bloqueo, invalida sesiones y dispositivos de confianza. Todo atómico.
  * Uso: npm run user:set-password <email>
  */
 import postgres from 'postgres';
@@ -14,46 +14,59 @@ const client = postgres(process.env.DATABASE_URL!);
 const db = drizzle(client, { schema });
 
 async function main() {
-  const email = process.argv[2]?.trim();
-  if (!email) die('Uso: npm run user:set-password <email>');
+  const emailArg = process.argv[2]?.trim().toLowerCase();
+  if (!emailArg) die('Uso: npm run user:set-password <email>');
 
-  const user = await db.query.users.findFirst({ where: eq(schema.users.email, email) });
-  if (!user) die(`No existe el usuario: ${email}`);
+  const user = await db.query.users.findFirst({
+    where: eq(schema.users.email, emailArg),
+  });
+  if (!user) die(`No existe el usuario: ${emailArg}`);
 
-  console.log(`\n── Cambiar contraseña: ${email} ────────────────────────────\n`);
+  console.log(`\n── Cambiar contraseña: ${emailArg} ─────────────────────────\n`);
 
   const password = await askPassword('Nueva contraseña (sin eco): ');
-  if (password.length < 8) die('La contraseña debe tener al menos 8 caracteres.');
+  if (password.length < 12) die('La contraseña debe tener al menos 12 caracteres.');
   const confirm = await askPassword('Confirmar contraseña: ');
   if (password !== confirm) die('Las contraseñas no coinciden.');
 
   const passwordHash = await hash(password);
 
-  await db
-    .update(schema.users)
-    .set({ passwordHash, passwordAttempts: 0, updatedAt: new Date() })
-    .where(eq(schema.users.id, user.id));
+  let sessionsCount = 0;
+  let devicesCount = 0;
 
-  // Invalidar todas las sesiones y dispositivos de confianza
-  const sessionsDeleted = await db
-    .delete(schema.sessions)
-    .where(eq(schema.sessions.userId, user.id))
-    .returning({ id: schema.sessions.id });
+  await db.transaction(async (tx) => {
+    await tx
+      .update(schema.users)
+      .set({
+        passwordHash,
+        passwordAttempts:    0,
+        passwordLockedUntil: null,
+        updatedAt:           new Date(),
+      })
+      .where(eq(schema.users.id, user.id));
 
-  const devicesDeleted = await db
-    .delete(schema.trustedDevices)
-    .where(eq(schema.trustedDevices.userId, user.id))
-    .returning({ id: schema.trustedDevices.id });
+    const sessions = await tx
+      .delete(schema.sessions)
+      .where(eq(schema.sessions.userId, user.id))
+      .returning({ id: schema.sessions.id });
+    sessionsCount = sessions.length;
 
-  await db.insert(schema.auditLog).values({
-    userId: user.id,
-    event:  'password_changed',
-    metadata: { via: 'user:set-password' },
+    const devices = await tx
+      .delete(schema.trustedDevices)
+      .where(eq(schema.trustedDevices.userId, user.id))
+      .returning({ id: schema.trustedDevices.id });
+    devicesCount = devices.length;
+
+    await tx.insert(schema.auditLog).values({
+      userId:   user.id,
+      event:    'password_changed',
+      metadata: { source: 'cli' },
+    });
   });
 
-  console.log(`\nOK  Contraseña actualizada para ${email}`);
-  console.log(`    Sesiones invalidadas:            ${sessionsDeleted.length}`);
-  console.log(`    Dispositivos de confianza borrados: ${devicesDeleted.length}`);
+  console.log(`\nOK  Contraseña actualizada para ${emailArg}`);
+  console.log(`    Sesiones invalidadas:               ${sessionsCount}`);
+  console.log(`    Dispositivos de confianza borrados: ${devicesCount}`);
   console.log('\n───────────────────────────────────────────────────────────\n');
 
   await client.end();
