@@ -79,22 +79,36 @@ export function SetupForm({ isAdmin }: { isAdmin: boolean }) {
       <div className="auth-split">
         <main className="auth-left">
           <div className="auth-card auth-card-wide">
-            <div className="auth-heading-wrap">
-              <h1 className="auth-heading">Configura la verificación en dos pasos</h1>
-              <p className="auth-sub" style={{ margin: 0 }}>Elige cómo quieres proteger tu cuenta</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <svg width="32" height="32" viewBox="0 0 28 28" aria-hidden="true">
+                  <rect x="1" y="1" width="26" height="26" rx="8" fill="none" stroke="var(--accent)" strokeWidth="2"/>
+                  <path d="M8 9l6 11 6-11" fill="none" stroke="var(--text)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <span style={{ fontSize: '18px', fontWeight: 700 }}>Vylax</span>
+              </div>
+              <span style={{ fontSize: '13px', color: 'var(--text-sec)' }}>Primer inicio de sesión</span>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div>
+              <h1 className="auth-heading" style={{ margin: 0 }}>Protege tu cuenta</h1>
+              <p className="auth-sub" style={{ margin: '6px 0 0' }}>Elige cómo quieres confirmar que eres tú cada vez que inicies sesión.</p>
+            </div>
+
+            <div className="method-grid">
               <label className="method-option">
                 <input
                   type="radio" name="method" value="totp"
                   checked={method === 'totp'}
                   onChange={() => setMethod('totp')}
                 />
-                <div>
-                  <div className="method-option-label">Aplicación de autenticación (recomendado)</div>
-                  <div className="method-option-desc">Google Authenticator, Authy, 1Password…</div>
-                </div>
+                <span>
+                  <span className="method-option-label">
+                    App de autenticación
+                    <span className="method-badge">Recomendado</span>
+                  </span>
+                  <span className="method-option-desc">Google o Microsoft Authenticator. Funciona sin conexión.</span>
+                </span>
               </label>
               <label className="method-option">
                 <input
@@ -102,10 +116,10 @@ export function SetupForm({ isAdmin }: { isAdmin: boolean }) {
                   checked={method === 'email'}
                   onChange={() => setMethod('email')}
                 />
-                <div>
-                  <div className="method-option-label">Código por correo electrónico</div>
-                  <div className="method-option-desc">Recibirás un código de 6 dígitos</div>
-                </div>
+                <span>
+                  <span className="method-option-label">Código por correo</span>
+                  <span className="method-option-desc">Te enviamos un código de 6 cifras en cada inicio de sesión.</span>
+                </span>
               </label>
             </div>
 
