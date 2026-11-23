@@ -48,7 +48,7 @@ export async function findSession(token: string) {
   return db.query.sessions.findFirst({ where: eq(sessions.tokenHash, tokenHash) });
 }
 
-export async function upgradeToFull(sessionId: string, orgId: string): Promise<void> {
+export async function upgradeToFull(sessionId: string, orgId: string | null): Promise<void> {
   await db.update(sessions).set({ mfaVerifiedAt: new Date(), orgId }).where(eq(sessions.id, sessionId));
 }
 

@@ -6,7 +6,7 @@ import Image from 'next/image';
 type Step = 'choice' | 'totp-setup' | 'totp-code' | 'recovery';
 
 interface SetupData { qrDataUrl: string; base32: string }
-interface VerifyData { recoveryCodes: string[] }
+interface VerifyData { recoveryCodes: string[]; next: string }
 
 export function SetupForm({ isAdmin }: { isAdmin: boolean }) {
   const [step,     setStep]     = useState<Step>(isAdmin ? 'totp-setup' : 'choice');
@@ -16,6 +16,7 @@ export function SetupForm({ isAdmin }: { isAdmin: boolean }) {
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
   const [copied,   setCopied]   = useState(false);
+  const [nextUrl,  setNextUrl]  = useState('/');
   const router = useRouter();
 
   async function startTotp() {
@@ -53,6 +54,7 @@ export function SetupForm({ isAdmin }: { isAdmin: boolean }) {
       const data = await res.json() as VerifyData & { error?: string };
       if (!res.ok) { setError(data.error ?? 'Código incorrecto.'); return; }
       setRecovery(data.recoveryCodes ?? []);
+      setNextUrl(data.next ?? '/');
       setStep('recovery');
     } catch { setError('Error de red.'); }
     finally { setLoading(false); }
@@ -180,7 +182,7 @@ export function SetupForm({ isAdmin }: { isAdmin: boolean }) {
         </button>
         <button
           className="btn btn-primary"
-          onClick={() => router.push('/login/organizacion')}
+          onClick={() => router.push(nextUrl)}
         >
           He guardado mis códigos → Continuar
         </button>

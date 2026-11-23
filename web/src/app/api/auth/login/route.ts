@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
       ? await createFullSession(user.id, orgId, ip, userAgent)
       : await createPartialSession(user.id, ip, userAgent); // >1 org: parcial para seleccionar
 
-    const res  = NextResponse.json({ next: orgId ? '/panel' : '/login/organizacion' });
+    const res  = NextResponse.json({ next: orgId ? '/' : '/login/organizacion' });
     const opts = cookieOpts(expiresAt, secure);
     (await cookies()).set(SESSION_COOKIE, token, opts);
     return res;

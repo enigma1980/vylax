@@ -505,3 +505,83 @@ describe('Guardas de setup 2FA y restricciones de rol', { skip }, () => {
     await db.update(schema.users).set({ twoFaMethod: null }).where(eq(schema.users.id, user.id));
   });
 });
+
+// ---------------------------------------------------------------------------
+// 8. Redirecciones y org asignada (regresión /panel y una sola org)
+// ---------------------------------------------------------------------------
+describe('Redirecciones y org asignada', { skip }, () => {
+  // Helper: hace login con TOTP y devuelve { cookie, rawCookie }
+  async function loginWithTotp(email: string): Promise<{ cookie: string; rawCookie: string }> {
+    const user = await db.query.users.findFirst({ where: eq(schema.users.email, email) });
+    assert.ok(user?.totpSecretEncrypted, `${email} debe tener TOTP configurado`);
+    await db.update(schema.users)
+      .set({ emailCodeAttempts: 0, totpLastStep: null })
+      .where(eq(schema.users.id, user.id));
+    await db.delete(schema.sessions).where(eq(schema.sessions.userId, user.id));
+
+    const resLogin = await post('/api/auth/login', { email, password: TEST_PASSWORD });
+    assert.equal(resLogin.status, 200, 'login correcto');
+    const rawCookie = parseCookie(resLogin, 'session_token')!;
+    assert.ok(rawCookie, 'cookie de sesión parcial recibida');
+
+    const { decryptTotpSecret } = await import('../src/lib/auth/totp.js');
+    const fresh  = await db.query.users.findFirst({ where: eq(schema.users.email, email) });
+    const base32 = decryptTotpSecret(fresh!.totpSecretEncrypted!);
+    const totp   = new TOTP({ issuer: 'Vylax', label: '', algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(base32) });
+
+    const resVerify = await post('/api/auth/2fa/verify', { code: totp.generate() }, `session_token=${rawCookie}`);
+    assert.equal(resVerify.status, 200, '2fa/verify OK');
+
+    return { rawCookie, cookie: `session_token=${rawCookie}` };
+  }
+
+  test('2fa/verify devuelve next "/" no "/panel" para usuario de una sola org (regresión bug 1)', async () => {
+    const user = await db.query.users.findFirst({ where: eq(schema.users.email, TEST_EMAIL_TOTP) });
+    assert.ok(user?.totpSecretEncrypted, 'usuario tiene TOTP');
+    await db.update(schema.users)
+      .set({ emailCodeAttempts: 0, totpLastStep: null })
+      .where(eq(schema.users.id, user.id));
+    await db.delete(schema.sessions).where(eq(schema.sessions.userId, user.id));
+
+    const resLogin = await post('/api/auth/login', { email: TEST_EMAIL_TOTP, password: TEST_PASSWORD });
+    assert.equal(resLogin.status, 200);
+    const rawCookie = parseCookie(resLogin, 'session_token')!;
+
+    const { decryptTotpSecret } = await import('../src/lib/auth/totp.js');
+    const fresh  = await db.query.users.findFirst({ where: eq(schema.users.email, TEST_EMAIL_TOTP) });
+    const base32 = decryptTotpSecret(fresh!.totpSecretEncrypted!);
+    const totp   = new TOTP({ issuer: 'Vylax', label: '', algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(base32) });
+
+    const resVerify = await post('/api/auth/2fa/verify', { code: totp.generate() }, `session_token=${rawCookie}`);
+    assert.equal(resVerify.status, 200);
+    const body = await resVerify.json() as { next: string };
+    assert.equal(body.next, '/', 'next debe ser "/" y no "/panel" ni "/login/organizacion"');
+  });
+
+  test('sesión queda con orgId tras 2FA con una sola org (salta /login/organizacion, regresión bug 2)', async () => {
+    // TEST_EMAIL_TOTP pertenece a una sola org; tras el 2FA la sesión debe tener orgId asignado
+    const user = await db.query.users.findFirst({ where: eq(schema.users.email, TEST_EMAIL_TOTP) });
+    assert.ok(user?.totpSecretEncrypted);
+    await db.update(schema.users)
+      .set({ emailCodeAttempts: 0, totpLastStep: null })
+      .where(eq(schema.users.id, user.id));
+    await db.delete(schema.sessions).where(eq(schema.sessions.userId, user.id));
+
+    const resLogin = await post('/api/auth/login', { email: TEST_EMAIL_TOTP, password: TEST_PASSWORD });
+    assert.equal(resLogin.status, 200);
+    const rawCookie = parseCookie(resLogin, 'session_token')!;
+
+    const { decryptTotpSecret } = await import('../src/lib/auth/totp.js');
+    const fresh  = await db.query.users.findFirst({ where: eq(schema.users.email, TEST_EMAIL_TOTP) });
+    const base32 = decryptTotpSecret(fresh!.totpSecretEncrypted!);
+    const totp   = new TOTP({ issuer: 'Vylax', label: '', algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(base32) });
+
+    const resVerify = await post('/api/auth/2fa/verify', { code: totp.generate() }, `session_token=${rawCookie}`);
+    assert.equal(resVerify.status, 200, '2fa/verify OK');
+
+    // Consultar la sesión en BD y comprobar que tiene orgId asignado
+    const tokenHash = createHash('sha256').update(rawCookie).digest('hex');
+    const session   = await db.query.sessions.findFirst({ where: eq(schema.sessions.tokenHash, tokenHash) });
+    assert.ok(session?.orgId, 'la sesión tiene orgId: no es necesario pasar por /login/organizacion');
+  });
+});

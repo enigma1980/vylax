@@ -106,12 +106,12 @@ export async function POST(req: NextRequest) {
   // Completar sesión
   const orgs = await db.query.userOrganizations.findMany({ where: eq(userOrganizations.userId, user.id) });
   const orgId = orgs.length === 1 ? orgs[0].orgId : null;
-  await upgradeToFull(session.id, orgId ?? '');
+  await upgradeToFull(session.id, orgId);
 
   await db.insert(auditLog).values({ userId: user.id, orgId: orgId ?? undefined, event: '2fa_ok', ip, userAgent, metadata: { method } });
 
   const secure = process.env.NODE_ENV === 'production';
-  const res = NextResponse.json({ next: orgId ? '/panel' : '/login/organizacion' });
+  const res = NextResponse.json({ next: orgId ? '/' : '/login/organizacion' });
 
   if (rememberDevice) {
     const { token: devToken, expiresAt } = await createTrustedDevice(user.id, userAgent);
