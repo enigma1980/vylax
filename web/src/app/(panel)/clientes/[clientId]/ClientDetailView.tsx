@@ -167,14 +167,23 @@ export function ClientDetailView({ client, devices, role }: Props) {
 
         {/* Cabecera del cliente */}
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 600 }}>{client.name}</h1>
-            <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-sec)' }}>
-              {client.sites.length > 0
-                ? client.sites.map(s => s.name).join(' · ')
-                : 'Sin sedes'}
-              {client.deviceCount > 0 && ` · ${client.deviceCount} equipo${client.deviceCount !== 1 ? 's' : ''}`}
-            </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Link href="/clientes"
+              style={{ color: 'var(--text-sec)', fontSize: '22px', lineHeight: 1, textDecoration: 'none', flexShrink: 0 }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-sec)')}
+              aria-label="Volver a Clientes">
+              ←
+            </Link>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 600 }}>{client.name}</h1>
+              <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-sec)' }}>
+                {client.sites.length > 0
+                  ? client.sites.map(s => s.name).join(' · ')
+                  : 'Sin sedes'}
+                {client.deviceCount > 0 && ` · ${client.deviceCount} equipo${client.deviceCount !== 1 ? 's' : ''}`}
+              </p>
+            </div>
           </div>
           {role === 'admin' && <AddDeviceButton clientId={client.id} />}
         </div>
