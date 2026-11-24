@@ -35,8 +35,8 @@ function avState(product: string, enabled: boolean, upToDate: boolean) {
   return [{ product, enabled, up_to_date: upToDate, real_time: enabled, last_update: daysAgo(upToDate ? 1 : 10).toISOString() }];
 }
 
-function osInfoState(name: string, build: string) {
-  return { name, build, edition: 'Pro', arch: 'x64' };
+function osInfoState(name: string, build: string, manufacturer?: string) {
+  return { name, build, edition: 'Pro', arch: 'x64', ...(manufacturer ? { manufacturer } : {}) };
 }
 
 function networkState(ip: string, speedMbps: number) {
@@ -114,7 +114,7 @@ async function main() {
       cpuAvgPct: 72, memoryUsedAvgPct: 68, ramTotalBytes: gb(32),
       volumes:   JSON.stringify([vol('C:', 'Sistema', 200, 98), vol('D:', 'Datos', 2000, 60)]),
       antivirus: JSON.stringify(avState('ESET Server Security', false, false)),
-      osInfo:    JSON.stringify(osInfoState('Windows Server 2019', '17763.4252')),
+      osInfo:    JSON.stringify(osInfoState('Windows Server 2019', '17763.4252', 'HP')),
       network:   JSON.stringify(networkState('192.168.1.10', 1000)),
       windowsUpdate: JSON.stringify(wuState(51, 5)),
       agentVersion: '1.0.0', agentMemBytes: mb(28),
@@ -124,7 +124,7 @@ async function main() {
       cpuAvgPct: 20, memoryUsedAvgPct: 45, ramTotalBytes: gb(8),
       volumes:   JSON.stringify([vol('C:', 'Sistema', 500, 55), vol('E:', 'Backups', 1000, 30)]),
       antivirus: JSON.stringify(avState('Windows Defender', true, true)),
-      osInfo:    JSON.stringify(osInfoState('Windows 11 Pro', '22621.2715')),
+      osInfo:    JSON.stringify(osInfoState('Windows 11 Pro', '22621.2715', 'Dell')),
       network:   JSON.stringify(networkState('192.168.1.21', 100)),
       windowsUpdate: JSON.stringify(wuState(10, 0)),
       agentVersion: '1.0.0', agentMemBytes: mb(22),
@@ -135,7 +135,7 @@ async function main() {
       cpuAvgPct: 15, memoryUsedAvgPct: 38, ramTotalBytes: gb(16),
       volumes:   JSON.stringify([vol('C:', 'Sistema', 256, 60)]),
       antivirus: JSON.stringify(avState('Windows Defender', true, true)),
-      osInfo:    JSON.stringify(osInfoState('Windows 11 Pro', '22621.2715')),
+      osInfo:    JSON.stringify(osInfoState('Windows 11 Pro', '22621.2715', 'HP')),
       network:   JSON.stringify(networkState('192.168.1.22', 100)),
       windowsUpdate: JSON.stringify(wuState(8, 0)),
       agentVersion: '1.0.0', agentMemBytes: mb(20),
@@ -145,7 +145,7 @@ async function main() {
       cpuAvgPct: 10, memoryUsedAvgPct: 30, ramTotalBytes: gb(16),
       volumes:   JSON.stringify([vol('C:', 'Sistema', 256, 45)]),
       antivirus: JSON.stringify(avState('Windows Defender', true, true)),
-      osInfo:    JSON.stringify(osInfoState('Windows 11 Pro', '22621.2715')),
+      osInfo:    JSON.stringify(osInfoState('Windows 11 Pro', '22621.2715', 'Lenovo')),
       network:   JSON.stringify(networkState('192.168.1.23', 100)),
       windowsUpdate: JSON.stringify(wuState(5, 0)),
       agentVersion: '1.0.0', agentMemBytes: mb(20),
@@ -155,7 +155,7 @@ async function main() {
       cpuAvgPct: 55, memoryUsedAvgPct: 72, ramTotalBytes: gb(64),
       volumes:   JSON.stringify([vol('C:', 'Sistema', 500, 70), vol('D:', 'BBDD', 4000, 55)]),
       antivirus: JSON.stringify(avState('ESET Server Security', true, true)),
-      osInfo:    JSON.stringify(osInfoState('Windows Server 2022', '20348.2113')),
+      osInfo:    JSON.stringify(osInfoState('Windows Server 2022', '20348.2113', 'HP')),
       network:   JSON.stringify(networkState('192.168.2.10', 1000)),
       windowsUpdate: JSON.stringify(wuState(48, 2)),
       agentVersion: '1.0.0', agentMemBytes: mb(32),
@@ -165,7 +165,7 @@ async function main() {
       cpuAvgPct: 25, memoryUsedAvgPct: 40, ramTotalBytes: gb(8),
       volumes:   JSON.stringify([vol('C:', 'Sistema', 256, 50)]),
       antivirus: JSON.stringify(avState('Windows Defender', true, true)),
-      osInfo:    JSON.stringify(osInfoState('Windows 10 Pro', '19045.3570')),
+      osInfo:    JSON.stringify(osInfoState('Windows 10 Pro', '19045.3570', 'HP')),
       network:   JSON.stringify(networkState('192.168.2.21', 100)),
       windowsUpdate: JSON.stringify(wuState(12, 0)),
       agentVersion: '1.0.0', agentMemBytes: mb(18),
@@ -219,7 +219,7 @@ async function main() {
       cpuAvgPct: 35, memoryUsedAvgPct: 60, ramTotalBytes: gb(32),
       volumes:   JSON.stringify([vol('C:', 'Sistema', 500, 65), vol('D:', 'Datos', 2000, 40)]),
       antivirus: JSON.stringify(avState('ESET Server Security', true, true)),
-      osInfo:    JSON.stringify(osInfoState('Windows Server 2022', '20348.2113')),
+      osInfo:    JSON.stringify(osInfoState('Windows Server 2022', '20348.2113', 'Dell')),
       network:   JSON.stringify(networkState('10.0.1.10', 1000)),
       windowsUpdate: JSON.stringify(wuState(10, 0)),
       agentVersion: '1.0.0', agentMemBytes: mb(30),
@@ -229,7 +229,7 @@ async function main() {
       cpuAvgPct: 18, memoryUsedAvgPct: 50, ramTotalBytes: gb(16),
       volumes:   JSON.stringify([vol('C:', 'Sistema', 500, 50)]),
       antivirus: JSON.stringify(avState('Windows Defender', true, true)),
-      osInfo:    JSON.stringify(osInfoState('Windows 11 Pro', '22621.2715')),
+      osInfo:    JSON.stringify(osInfoState('Windows 11 Pro', '22621.2715', 'Dell')),
       network:   JSON.stringify(networkState('10.0.1.21', 100)),
       windowsUpdate: JSON.stringify(wuState(7, 0)),
       agentVersion: '1.0.0', agentMemBytes: mb(20),
@@ -240,7 +240,7 @@ async function main() {
       cpuAvgPct: null, memoryUsedAvgPct: null, ramTotalBytes: gb(8),
       volumes:   JSON.stringify([vol('C:', 'Sistema', 500, 93)]),
       antivirus: JSON.stringify(avState('Windows Defender', true, false)),
-      osInfo:    JSON.stringify(osInfoState('Windows 10 Pro', '19045.3570')),
+      osInfo:    JSON.stringify(osInfoState('Windows 10 Pro', '19045.3570', 'Lenovo')),
       network:   JSON.stringify(networkState('10.0.1.22', 100)),
       windowsUpdate: JSON.stringify(wuState(60, 8)),
       agentVersion: '1.0.0', agentMemBytes: mb(18),
@@ -250,7 +250,7 @@ async function main() {
       cpuAvgPct: 30, memoryUsedAvgPct: 55, ramTotalBytes: gb(16),
       volumes:   JSON.stringify([vol('C:', 'Sistema', 512, 60)]),
       antivirus: JSON.stringify(avState('Windows Defender', true, true)),
-      osInfo:    JSON.stringify(osInfoState('Windows 11 Pro', '22621.2715')),
+      osInfo:    JSON.stringify(osInfoState('Windows 11 Pro', '22621.2715', 'Dell')),
       network:   JSON.stringify(networkState('10.0.1.30', 100)),
       windowsUpdate: JSON.stringify(wuState(15, 0)),
       agentVersion: '1.0.0', agentMemBytes: mb(22),

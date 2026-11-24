@@ -1,4 +1,5 @@
 'use client';
+import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useBreadcrumb } from '@/lib/breadcrumb';
@@ -25,13 +26,13 @@ export function HeaderBreadcrumb({ orgName }: Props) {
       <nav aria-label="Ruta" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '14px', color: 'var(--text-sec)' }}>
         <span>{orgName}</span>
         {crumbs.map((c, i) => (
-          <>
+          <React.Fragment key={i}>
             {sep}
             {c.href
-              ? <Link key={i} href={c.href} style={{ color: 'var(--text-sec)', textDecoration: 'none' }}>{c.label}</Link>
-              : <span key={i} style={{ color: 'var(--text)' }}>{c.label}</span>
+              ? <Link href={c.href} style={{ color: 'var(--text-sec)', textDecoration: 'none' }}>{c.label}</Link>
+              : <span style={{ color: 'var(--text)' }}>{c.label}</span>
             }
-          </>
+          </React.Fragment>
         ))}
       </nav>
     );

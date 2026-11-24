@@ -23,7 +23,7 @@ export default async function PanelHome() {
   const chartPoints = buildChartPoints(dayCountArr);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div style={{ maxWidth: '1680px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
         <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 600 }}>Vista general</h1>

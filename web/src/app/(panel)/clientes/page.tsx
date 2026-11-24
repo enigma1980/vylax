@@ -7,7 +7,7 @@ export default async function ClientesPage() {
   const list    = await getClientList(session.orgId);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div style={{ maxWidth: '1680px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 600 }}>Clientes</h1>
       </div>

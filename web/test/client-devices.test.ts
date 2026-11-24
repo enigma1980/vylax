@@ -19,6 +19,7 @@ function makeDevice(overrides: Partial<DeviceRow>): DeviceRow {
     id: randomUUID(), hostname: 'HOST', status: 'online', effType: 'pc',
     deviceType: null, deviceTypeHint: null, siteId: 'site-a',
     lastSeenAt: null, agentVersion: null, osName: null, osBuild: null,
+    manufacturer: null,
     cpuAvgPct: null, memoryUsedAvgPct: null, ramTotalBytes: null,
     volumes: null, antivirus: null, windowsUpdate: null,
     physicalDisks: null, loggedOnUser: null, agentMemBytes: null,

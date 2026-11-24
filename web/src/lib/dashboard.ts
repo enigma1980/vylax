@@ -379,6 +379,7 @@ export interface DeviceRow {
   // State
   osName:           string | null;
   osBuild:          string | null;
+  manufacturer:     string | null;
   cpuAvgPct:        number | null;
   memoryUsedAvgPct: number | null;
   ramTotalBytes:    number | null;
@@ -494,7 +495,7 @@ export async function getDevicesForClient(orgId: string, clientId: string): Prom
     const devEvents      = eventsByDevice.get(row.id) ?? [];
     const latestEvent    = devEvents[0]?.eventType ?? null;
     const status         = classifyDevice(row.lastSeenAt, effType, latestEvent, now);
-    const osInfo         = row.osInfo as { name?: string; build?: string } | null;
+    const osInfo         = row.osInfo as { name?: string; build?: string; manufacturer?: string } | null;
 
     return {
       id:               row.id,
@@ -508,6 +509,7 @@ export async function getDevicesForClient(orgId: string, clientId: string): Prom
       agentVersion:     row.agentVersion ?? null,
       osName:           osInfo?.name ?? null,
       osBuild:          osInfo?.build ?? null,
+      manufacturer:     osInfo?.manufacturer ?? null,
       cpuAvgPct:        row.cpuAvgPct ?? null,
       memoryUsedAvgPct: row.memoryUsedAvgPct ?? null,
       ramTotalBytes:    row.ramTotalBytes ?? null,

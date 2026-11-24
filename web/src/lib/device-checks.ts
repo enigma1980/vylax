@@ -3,8 +3,9 @@ import { isOsSupported } from './os-support';
 export type CheckStatus = 'ok' | 'warn' | 'crit' | 'no-data';
 
 export interface CheckDetail {
-  label:  string;
-  status: CheckStatus;
+  label:     string;
+  failLabel: string; // nombre del problema para mostrar bajo el anillo
+  status:    CheckStatus;
 }
 
 export interface CheckResult {
@@ -71,9 +72,9 @@ export function securityChecks(
   now: Date = new Date(),
 ): CheckRing {
   return buildRing([
-    { label: 'Antivirus activo y al día', status: checkAntivirus(state.antivirus) },
-    { label: 'Actualizaciones (≤ 45 días)', status: checkWindowsUpdate(state.windowsUpdate, now) },
-    { label: 'Sistema operativo con soporte', status: checkOs(state.osInfo, now) },
+    { label: 'Antivirus activo y al día',    failLabel: 'Antivirus desactualizado',    status: checkAntivirus(state.antivirus) },
+    { label: 'Actualizaciones (≤ 45 días)',  failLabel: 'Actualizaciones pendientes',  status: checkWindowsUpdate(state.windowsUpdate, now) },
+    { label: 'Sistema operativo con soporte',failLabel: 'SO sin soporte',              status: checkOs(state.osInfo, now) },
   ]);
 }
 
@@ -82,13 +83,13 @@ export function securityChecks(
 // ---------------------------------------------------------------------------
 
 function checkCpu(cpuAvgPct: unknown): CheckDetail {
-  if (typeof cpuAvgPct !== 'number') return { label: 'CPU (media)', status: 'no-data' };
-  return { label: 'CPU (media)', status: cpuAvgPct < 90 ? 'ok' : 'warn' };
+  if (typeof cpuAvgPct !== 'number') return { label: 'CPU (media)', failLabel: 'CPU saturada', status: 'no-data' };
+  return { label: 'CPU (media)', failLabel: 'CPU saturada', status: cpuAvgPct < 90 ? 'ok' : 'warn' };
 }
 
 function checkRam(memoryUsedAvgPct: unknown): CheckDetail {
-  if (typeof memoryUsedAvgPct !== 'number') return { label: 'Memoria', status: 'no-data' };
-  return { label: 'Memoria', status: memoryUsedAvgPct < 90 ? 'ok' : 'warn' };
+  if (typeof memoryUsedAvgPct !== 'number') return { label: 'Memoria', failLabel: 'RAM saturada', status: 'no-data' };
+  return { label: 'Memoria', failLabel: 'RAM saturada', status: memoryUsedAvgPct < 90 ? 'ok' : 'warn' };
 }
 
 /** Volumes: [{ mount, free_bytes, total_bytes }] */
@@ -104,7 +105,8 @@ function checkVolumes(volumes: unknown): CheckDetail[] {
       else if (freePct < 0.05) status = 'crit';
       else if (freePct < 0.15) status = 'warn';
       else                      status = 'ok';
-      return { label: `Disco ${v.mount ?? '?'}`, status };
+      const failLabel = status === 'crit' ? `Disco ${v.mount ?? '?'} crítico` : `Disco ${v.mount ?? '?'} lleno`;
+      return { label: `Disco ${v.mount ?? '?'}`, failLabel, status };
     });
 }
 
@@ -113,7 +115,7 @@ function checkSmart(physicalDisks: unknown): CheckDetail | null {
   if (!Array.isArray(physicalDisks) || physicalDisks.length === 0) return null;
   const allOk = (physicalDisks as Array<{ health?: string; predict_failure?: boolean }>)
     .every(d => (d.health === 'Healthy' || d.health === 'OK') && !d.predict_failure);
-  return { label: 'Salud de discos (SMART)', status: allOk ? 'ok' : 'crit' };
+  return { label: 'Salud de discos (SMART)', failLabel: 'Fallo SMART', status: allOk ? 'ok' : 'crit' };
 }
 
 export function performanceChecks(

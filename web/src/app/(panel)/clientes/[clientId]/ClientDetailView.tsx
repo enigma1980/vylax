@@ -267,7 +267,7 @@ export function ClientDetailView({ client, devices, role }: Props) {
                         <td style={{ padding: '12px', borderBottom: '1px solid #232529', color: 'var(--text-sec)' }}>
                           {d.effType ? (TYPE_LABEL[d.effType] ?? d.effType) : '—'}
                         </td>
-                        <td style={{ padding: '12px', borderBottom: '1px solid #232529', color: 'var(--text-sec)', fontFamily: 'monospace' }}>
+                        <td style={{ padding: '12px', borderBottom: '1px solid #232529', color: 'var(--text-sec)' }}>
                           {getLanIp(d)}
                         </td>
                         <td style={{ padding: '12px', borderBottom: '1px solid #232529', color: 'var(--text-sec)', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -470,9 +470,9 @@ function DevicePanel({ device, onClose }: { device: DeviceRow; onClose: () => vo
     wuColor = days <= 45 ? 'var(--green)' : 'var(--amber)';
   }
 
-  // Qué comprobaciones fallan en cada anillo
-  const secFail  = secRing.details.filter(d => d.status !== 'ok' && d.status !== 'no-data').map(d => d.label);
-  const perfFail = perfRing.details.filter(d => d.status !== 'ok' && d.status !== 'no-data').map(d => d.label);
+  // Qué comprobaciones fallan en cada anillo (nombre del problema)
+  const secFail  = secRing.details.filter(d => d.status !== 'ok' && d.status !== 'no-data').map(d => d.failLabel);
+  const perfFail = perfRing.details.filter(d => d.status !== 'ok' && d.status !== 'no-data').map(d => d.failLabel);
 
   function copyIp() {
     navigator.clipboard.writeText(lanIp).catch(() => {});
@@ -481,7 +481,7 @@ function DevicePanel({ device, onClose }: { device: DeviceRow; onClose: () => vo
   }
 
   const typeLabel = device.effType ? (TYPE_LABEL[device.effType] ?? device.effType) : null;
-  const subtitle  = [typeLabel, device.osName].filter(Boolean).join(' · ');
+  const subtitle  = [device.manufacturer, typeLabel, device.osName].filter(Boolean).join(' · ');
 
   return (
     <>
@@ -531,7 +531,7 @@ function DevicePanel({ device, onClose }: { device: DeviceRow; onClose: () => vo
       </div>
 
       {/* Anillos */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}>
         <RingCard label="Seguridad"   ring={secRing}  subtitle={secFail.length  ? secFail.join(', ')  : 'Sin incidencias'} />
         <RingCard label="Rendimiento" ring={perfRing} subtitle={perfFail.length ? perfFail.join(', ') : 'Sin incidencias'} />
       </div>
@@ -541,12 +541,10 @@ function DevicePanel({ device, onClose }: { device: DeviceRow; onClose: () => vo
         <dt style={{ color: 'var(--text-sec)' }}>IP</dt>
         <dd style={{ margin: 0 }}>{lanIp}{getLinkSpeedLabel(device)}</dd>
 
-        {device.loggedOnUser && (
-          <>
-            <dt style={{ color: 'var(--text-sec)' }}>Usuario</dt>
-            <dd style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{device.loggedOnUser}</dd>
-          </>
-        )}
+        <dt style={{ color: 'var(--text-sec)' }}>Usuario</dt>
+        <dd style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {device.loggedOnUser ?? '—'}
+        </dd>
 
         <dt style={{ color: 'var(--text-sec)' }}>CPU · RAM</dt>
         <dd style={{ margin: 0 }}>
@@ -652,6 +650,7 @@ function RingCard({ label, ring, subtitle }: {
       background: '#141518', border: '1px solid var(--border)',
       borderRadius: '10px', padding: '12px',
       display: 'flex', alignItems: 'center', gap: '10px',
+      minWidth: 0,
     }}>
       <div style={{ position: 'relative', width: '56px', height: '56px', flexShrink: 0 }}>
         <svg viewBox="0 0 120 120" width="56" height="56" role="img" aria-label={`${label}: ${ok} de ${total}`}>
