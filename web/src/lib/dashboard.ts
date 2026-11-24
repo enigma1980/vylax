@@ -1,6 +1,6 @@
 import { db } from '@/db';
-import { devices, deviceCurrentState, clients, sites, metrics5min } from '@/db/schema';
-import { eq, and, ne, count, isNotNull, sql, inArray } from 'drizzle-orm';
+import { devices, deviceCurrentState, clients, sites, metrics5min, agentEvents } from '@/db/schema';
+import { eq, and, ne, count, isNotNull, sql, inArray, desc } from 'drizzle-orm';
 import {
   classifyDevice,
   clientSemaphore,
@@ -349,4 +349,179 @@ export async function getOverviewData(orgId: string): Promise<OverviewData> {
     dayCountArr,
     disks,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Vista de cliente: tipos e interfaces
+// ---------------------------------------------------------------------------
+
+export interface ClientDetail {
+  id:          string;
+  name:        string;
+  sites:       Array<{ id: string; name: string }>;
+  deviceCount: number;
+}
+
+export interface DeviceEvent {
+  eventType:  string;
+  occurredAt: string;
+}
+
+export interface DeviceRow {
+  id:               string;
+  hostname:         string;
+  status:           DeviceStatus;
+  effType:          string | null;
+  deviceType:       string | null;
+  deviceTypeHint:   string | null;
+  siteId:           string | null;
+  lastSeenAt:       string | null;
+  // State
+  osName:           string | null;
+  osBuild:          string | null;
+  cpuAvgPct:        number | null;
+  memoryUsedAvgPct: number | null;
+  ramTotalBytes:    number | null;
+  volumes:          Array<{ mount: string; label?: string; free_bytes: number; total_bytes: number }> | null;
+  antivirus:        Array<{ product: string; enabled: boolean; up_to_date: boolean }> | null;
+  windowsUpdate:    { last_installed_at?: string; days_since_last?: number } | null;
+  physicalDisks:    Array<{ serial: string; health: string; predict_failure: boolean }> | null;
+  loggedOnUser:     string | null;
+  agentVersion:     string | null;
+  agentMemBytes:    number | null;
+  network:          { adapters?: Array<{ name: string; ipv4?: string[]; link_speed_mbps?: number }> } | null;
+  lastEvents:       DeviceEvent[];
+}
+
+export async function getClientDetail(orgId: string, clientId: string): Promise<ClientDetail | null> {
+  const clientRecord = await db.query.clients.findFirst({
+    where: and(eq(clients.id, clientId), eq(clients.organizationId, orgId)),
+  });
+  if (!clientRecord) return null;
+
+  const [siteRows, deviceCount] = await Promise.all([
+    db
+      .select({ id: sites.id, name: sites.name })
+      .from(sites)
+      .where(and(eq(sites.clientId, clientId), eq(sites.organizationId, orgId)))
+      .orderBy(sites.name),
+    db
+      .select({ n: count() })
+      .from(devices)
+      .where(and(
+        eq(devices.clientId, clientId),
+        eq(devices.organizationId, orgId),
+        ne(devices.status, 'uninstalled'),
+        ne(devices.status, 'pending_assignment'),
+      )),
+  ]);
+
+  return {
+    id:          clientRecord.id,
+    name:        clientRecord.name,
+    sites:       siteRows,
+    deviceCount: Number(deviceCount[0]?.n ?? 0),
+  };
+}
+
+export async function getDevicesForClient(orgId: string, clientId: string): Promise<DeviceRow[]> {
+  const clientRecord = await db.query.clients.findFirst({
+    where: and(eq(clients.id, clientId), eq(clients.organizationId, orgId)),
+  });
+  if (!clientRecord) throw new Error('Cliente no encontrado o sin acceso');
+
+  const now = new Date();
+
+  const rows = await db
+    .select({
+      id:               devices.id,
+      hostname:         devices.hostname,
+      deviceType:       devices.deviceType,
+      deviceTypeHint:   devices.deviceTypeHint,
+      lastSeenAt:       devices.lastSeenAt,
+      siteId:           devices.siteId,
+      agentVersion:     deviceCurrentState.agentVersion,
+      cpuAvgPct:        deviceCurrentState.cpuAvgPct,
+      memoryUsedAvgPct: deviceCurrentState.memoryUsedAvgPct,
+      ramTotalBytes:    deviceCurrentState.ramTotalBytes,
+      volumes:          deviceCurrentState.volumes,
+      antivirus:        deviceCurrentState.antivirus,
+      windowsUpdate:    deviceCurrentState.windowsUpdate,
+      physicalDisks:    deviceCurrentState.physicalDisks,
+      osInfo:           deviceCurrentState.osInfo,
+      loggedOnUser:     deviceCurrentState.loggedOnUser,
+      agentMemBytes:    deviceCurrentState.agentMemBytes,
+      network:          deviceCurrentState.network,
+    })
+    .from(devices)
+    .leftJoin(deviceCurrentState, eq(devices.id, deviceCurrentState.deviceId))
+    .where(
+      and(
+        eq(devices.organizationId, orgId),
+        eq(devices.clientId, clientId),
+        ne(devices.status, 'uninstalled'),
+        ne(devices.status, 'pending_assignment'),
+      ),
+    )
+    .orderBy(devices.hostname);
+
+  if (rows.length === 0) return [];
+
+  const deviceIds = rows.map(r => r.id);
+
+  const eventRows = await db
+    .select({
+      deviceId:   agentEvents.deviceId,
+      eventType:  agentEvents.eventType,
+      occurredAt: agentEvents.occurredAt,
+    })
+    .from(agentEvents)
+    .where(and(
+      eq(agentEvents.organizationId, orgId),
+      inArray(agentEvents.deviceId, deviceIds),
+    ))
+    .orderBy(agentEvents.deviceId, desc(agentEvents.occurredAt));
+
+  const eventsByDevice = new Map<string, Array<{ eventType: string; occurredAt: Date }>>();
+  for (const ev of eventRows) {
+    if (!eventsByDevice.has(ev.deviceId)) eventsByDevice.set(ev.deviceId, []);
+    const list = eventsByDevice.get(ev.deviceId)!;
+    if (list.length < 10) list.push({ eventType: ev.eventType, occurredAt: ev.occurredAt! });
+  }
+
+  return rows.map(row => {
+    const effType        = effectiveDeviceType(row);
+    const devEvents      = eventsByDevice.get(row.id) ?? [];
+    const latestEvent    = devEvents[0]?.eventType ?? null;
+    const status         = classifyDevice(row.lastSeenAt, effType, latestEvent, now);
+    const osInfo         = row.osInfo as { name?: string; build?: string } | null;
+
+    return {
+      id:               row.id,
+      hostname:         row.hostname,
+      status,
+      effType,
+      deviceType:       row.deviceType,
+      deviceTypeHint:   row.deviceTypeHint,
+      siteId:           row.siteId,
+      lastSeenAt:       row.lastSeenAt?.toISOString() ?? null,
+      agentVersion:     row.agentVersion ?? null,
+      osName:           osInfo?.name ?? null,
+      osBuild:          osInfo?.build ?? null,
+      cpuAvgPct:        row.cpuAvgPct ?? null,
+      memoryUsedAvgPct: row.memoryUsedAvgPct ?? null,
+      ramTotalBytes:    row.ramTotalBytes ?? null,
+      volumes:          row.volumes as DeviceRow['volumes'],
+      antivirus:        row.antivirus as DeviceRow['antivirus'],
+      windowsUpdate:    row.windowsUpdate as DeviceRow['windowsUpdate'],
+      physicalDisks:    row.physicalDisks as DeviceRow['physicalDisks'],
+      loggedOnUser:     row.loggedOnUser ?? null,
+      agentMemBytes:    row.agentMemBytes ?? null,
+      network:          row.network as DeviceRow['network'],
+      lastEvents:       devEvents.slice(0, 3).map(e => ({
+        eventType:  e.eventType,
+        occurredAt: e.occurredAt.toISOString(),
+      })),
+    };
+  });
 }
