@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { getSession, UnauthenticatedError } from '@/lib/dal';
-import { db } from '@/db';
-import { clients, enrollmentTokens, auditLog } from '@/db/schema';
-import { and, eq } from 'drizzle-orm';
-import { generateEnrollmentToken, sha256hex, tokenPrefix } from '@/lib/crypto';
+import { createToken } from '@/lib/sites-tokens';
+
+const bodySchema = z.object({
+  label:  z.string().min(1).max(200).trim().optional(),
+  siteId: z.string().uuid().nullable().optional(),
+});
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ clientId: string }> },
 ) {
   let session: Awaited<ReturnType<typeof getSession>>;
@@ -20,29 +23,21 @@ export async function POST(
   const { clientId } = await params;
   const { orgId, userId } = session;
 
-  const client = await db.query.clients.findFirst({
-    where: and(eq(clients.id, clientId), eq(clients.organizationId, orgId)),
-  });
-  if (!client) return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
+  let rawBody = {};
+  try { rawBody = await req.json(); } catch { /* cuerpo vacío → defaults */ }
+  const parsed = bodySchema.safeParse(rawBody);
+  const userLabel  = parsed.success ? parsed.data.label  : undefined;
+  const userSiteId = parsed.success ? (parsed.data.siteId ?? null) : null;
 
-  const fullToken = generateEnrollmentToken();
-  const hash      = sha256hex(fullToken);
-  const prefix    = tokenPrefix(fullToken);
-
-  await db.transaction(async tx => {
-    const [token] = await tx.insert(enrollmentTokens).values({
-      organizationId: orgId,
+  try {
+    const { fullToken } = await createToken(orgId, userId, {
       clientId,
-      tokenHash:   hash,
-      tokenPrefix: prefix,
-      label:       `Añadir equipo – ${new Date().toLocaleDateString('es')}`,
-    }).returning({ id: enrollmentTokens.id });
-
-    await tx.insert(auditLog).values({
-      userId, orgId, event: 'token_created',
-      metadata: { tokenId: token.id, clientId, prefix, source: 'add_device' },
+      siteId: userSiteId,
+      label:  userLabel ?? `Añadir equipo – ${new Date().toLocaleDateString('es')}`,
     });
-  });
-
-  return NextResponse.json({ fullToken }, { status: 201 });
+    return NextResponse.json({ fullToken }, { status: 201 });
+  } catch (e) {
+    const err = e as { httpStatus?: number; message?: string };
+    return NextResponse.json({ error: err.message ?? 'Error interno' }, { status: err.httpStatus ?? 500 });
+  }
 }

@@ -23,7 +23,8 @@
     "test:checks": "tsx --test test/device-checks.test.ts",
     "test:enroll": "dotenv -e .env.local -- tsx --test test/enroll-ip-revoke.test.ts",
     "test:clientes": "dotenv -e .env.local -- tsx --test test/clientes.test.ts",
-    "test:client-devices": "dotenv -e .env.local -- tsx --test test/client-devices.test.ts"
+    "test:client-devices": "dotenv -e .env.local -- tsx --test test/client-devices.test.ts",
+    "test:sites-tokens": "dotenv -e .env.local -- tsx --test test/sites-tokens.test.ts"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.2",

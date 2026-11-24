@@ -1,14 +1,18 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { securityChecks, performanceChecks } from '@/lib/device-checks';
 import { applyFilters, computeCounts, hasIssues, type FilterType } from '@/lib/device-filters';
 import { useBreadcrumb } from '@/lib/breadcrumb';
 import type { ClientDetail, DeviceRow } from '@/lib/dashboard';
+import type { SiteRow, TokenRow } from '@/lib/sites-tokens';
 
 interface Props {
   client:  ClientDetail;
   devices: DeviceRow[];
+  sites:   SiteRow[];
+  tokens:  TokenRow[];
   role:    string;
 }
 
@@ -124,8 +128,9 @@ const CIRC = 302;
 // Componente principal
 // ---------------------------------------------------------------------------
 
-export function ClientDetailView({ client, devices, role }: Props) {
-  const { setCrumbs } = useBreadcrumb();
+export function ClientDetailView({ client, devices, sites, tokens, role }: Props) {
+  const router             = useRouter();
+  const { setCrumbs }      = useBreadcrumb();
   const [tab,        setTab]        = useState<TabType>('equipos');
   const [siteFilter, setSiteFilter] = useState('');
   const [filter,     setFilter]     = useState<FilterType>('all');
@@ -299,12 +304,32 @@ export function ClientDetailView({ client, devices, role }: Props) {
           </div>
         )}
 
-        {/* Pestañas pendientes */}
-        {(tab === 'sedes' || tab === 'tokens' || tab === 'ajustes') && (
+        {/* Pestaña Sedes */}
+        {tab === 'sedes' && (
+          <SedesTab
+            sites={sites}
+            remotosCount={devices.filter(d => d.siteId === null).length}
+            clientId={client.id}
+            role={role}
+            onRefresh={() => router.refresh()}
+          />
+        )}
+
+        {/* Pestaña Tokens */}
+        {tab === 'tokens' && (
+          <TokensTab
+            tokens={tokens}
+            sites={sites}
+            clientId={client.id}
+            role={role}
+            onRefresh={() => router.refresh()}
+          />
+        )}
+
+        {/* Pestaña Ajustes */}
+        {tab === 'ajustes' && (
           <div className="soon-wrap">
-            <p className="soon-sub">
-              {tab === 'sedes' ? 'Sedes' : tab === 'tokens' ? 'Tokens de alta' : 'Ajustes'} — se implementa en la parte {tab === 'ajustes' ? '4/5' : '4'} del plan
-            </p>
+            <p className="soon-sub">Ajustes — se implementa en la parte 5 del plan</p>
           </div>
         )}
       </section>
@@ -682,6 +707,507 @@ function RingCard({ label, ring, subtitle }: {
         </div>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pestaña Sedes
+// ---------------------------------------------------------------------------
+
+function parseIps(text: string): string[] {
+  return text.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+}
+
+function SedesTab({
+  sites, remotosCount, clientId, role, onRefresh,
+}: {
+  sites:         SiteRow[];
+  remotosCount:  number;
+  clientId:      string;
+  role:           string;
+  onRefresh:     () => void;
+}) {
+  const [modal,   setModal]   = useState<'create' | 'edit' | 'delete' | null>(null);
+  const [current, setCurrent] = useState<SiteRow | null>(null);
+  const [name,    setName]    = useState('');
+  const [ipsText, setIpsText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [err,     setErr]     = useState<string | null>(null);
+
+  function openCreate() { setModal('create'); setCurrent(null); setName(''); setIpsText(''); setErr(null); }
+  function openEdit(s: SiteRow) { setModal('edit'); setCurrent(s); setName(s.name); setIpsText(s.publicIps.join('\n')); setErr(null); }
+  function openDelete(s: SiteRow) { setModal('delete'); setCurrent(s); setErr(null); }
+  function close() { setModal(null); setCurrent(null); }
+
+  async function save() {
+    setLoading(true); setErr(null);
+    const publicIps = parseIps(ipsText);
+    try {
+      if (modal === 'create') {
+        const res = await fetch(`/api/clientes/${clientId}/sites`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim(), publicIps }),
+        });
+        if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d.error ?? 'Error'); }
+      } else if (modal === 'edit' && current) {
+        const res = await fetch(`/api/clientes/${clientId}/sites/${current.id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim(), publicIps }),
+        });
+        if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d.error ?? 'Error'); }
+      }
+      close(); onRefresh();
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Error'); }
+    finally { setLoading(false); }
+  }
+
+  async function confirmDelete() {
+    if (!current) return;
+    setLoading(true); setErr(null);
+    try {
+      const res = await fetch(`/api/clientes/${clientId}/sites/${current.id}`, { method: 'DELETE' });
+      if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d.error ?? 'Error'); }
+      close(); onRefresh();
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Error'); }
+    finally { setLoading(false); }
+  }
+
+  const inputStyle: React.CSSProperties = {
+    background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px',
+    color: 'var(--text)', padding: '9px 12px', font: 'inherit', fontSize: '13px',
+    width: '100%', outline: 'none', boxSizing: 'border-box',
+  };
+  const btnPrimary: React.CSSProperties = {
+    border: 0, background: 'var(--accent)', color: '#0B1220',
+    borderRadius: '8px', padding: '10px 16px',
+    font: 'inherit', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+  };
+  const btnSecondary: React.CSSProperties = {
+    border: '1px solid var(--border)', background: 'none', color: 'var(--text)',
+    borderRadius: '8px', padding: '10px 16px',
+    font: 'inherit', fontSize: '13px', cursor: 'pointer',
+  };
+  const btnDanger: React.CSSProperties = {
+    border: 0, background: 'var(--red)', color: '#fff',
+    borderRadius: '8px', padding: '10px 16px',
+    font: 'inherit', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+  };
+
+  const allSites = [...sites];
+
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>Sedes ({sites.length})</h2>
+        {role === 'admin' && (
+          <button type="button" onClick={openCreate} style={btnPrimary}>+ Nueva sede</button>
+        )}
+      </div>
+
+      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+          <thead>
+            <tr style={{ color: 'var(--text-sec)', fontSize: '12px', textAlign: 'left' }}>
+              {['Nombre', 'IPs Públicas', 'Equipos', ...(role === 'admin' ? ['Acciones'] : [])].map(h => (
+                <th key={h} style={{ padding: '12px', fontWeight: 500, borderBottom: '1px solid var(--border)' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {allSites.map(s => (
+              <tr key={s.id}>
+                <td style={{ padding: '12px', borderBottom: '1px solid #232529', fontWeight: 500 }}>{s.name}</td>
+                <td style={{ padding: '12px', borderBottom: '1px solid #232529', color: 'var(--text-sec)' }}>
+                  {s.publicIps.length ? s.publicIps.join(', ') : '—'}
+                </td>
+                <td style={{ padding: '12px', borderBottom: '1px solid #232529' }}>{s.deviceCount}</td>
+                {role === 'admin' && (
+                  <td style={{ padding: '12px', borderBottom: '1px solid #232529' }}>
+                    <span style={{ display: 'flex', gap: '8px' }}>
+                      <button type="button" onClick={() => openEdit(s)} style={{ ...btnSecondary, padding: '5px 12px', fontSize: '12px' }}>Editar</button>
+                      <button type="button" onClick={() => openDelete(s)} style={{ ...btnDanger, padding: '5px 12px', fontSize: '12px', opacity: s.deviceCount > 0 ? 0.5 : 1 }}>Borrar</button>
+                    </span>
+                  </td>
+                )}
+              </tr>
+            ))}
+            {/* Remotos / sin sede — siempre al final */}
+            <tr>
+              <td style={{ padding: '12px', color: 'var(--text-sec)', fontStyle: 'italic' }}>Remotos / sin sede</td>
+              <td style={{ padding: '12px', color: 'var(--text-sec)' }}>Asignación por IP</td>
+              <td style={{ padding: '12px' }}>{remotosCount}</td>
+              {role === 'admin' && <td style={{ padding: '12px' }} />}
+            </tr>
+            {allSites.length === 0 && remotosCount === 0 && (
+              <tr>
+                <td colSpan={role === 'admin' ? 4 : 3}
+                  style={{ padding: '24px', textAlign: 'center', color: 'var(--text-sec)' }}>
+                  Sin sedes creadas
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modal crear / editar */}
+      {(modal === 'create' || modal === 'edit') && (
+        <div role="dialog" aria-modal="true" aria-label={modal === 'create' ? 'Nueva sede' : 'Editar sede'}
+          style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          onClick={e => { if (e.target === e.currentTarget) close(); }}>
+          <div style={{ background: '#16171A', border: '1px solid var(--border)', borderRadius: '14px',
+            padding: '28px', width: '100%', maxWidth: '480px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>
+                {modal === 'create' ? 'Nueva sede' : 'Editar sede'}
+              </h2>
+              <button type="button" onClick={close} aria-label="Cerrar"
+                style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '8px',
+                  color: 'var(--text-sec)', width: '32px', height: '32px', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18"/>
+                </svg>
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label style={{ fontSize: '13px', color: 'var(--text-sec)' }}>Nombre</label>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="Nombre de la sede" style={inputStyle} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label style={{ fontSize: '13px', color: 'var(--text-sec)' }}>IPs públicas (una por línea o separadas por coma)</label>
+              <textarea value={ipsText} onChange={e => setIpsText(e.target.value)}
+                placeholder="203.0.113.1&#10;203.0.113.2"
+                rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
+            </div>
+            {err && <p style={{ margin: 0, fontSize: '13px', color: 'var(--red)' }}>{err}</p>}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={close} style={btnSecondary}>Cancelar</button>
+              <button type="button" onClick={save} disabled={loading || !name.trim()}
+                style={{ ...btnPrimary, opacity: loading || !name.trim() ? 0.7 : 1, cursor: loading || !name.trim() ? 'not-allowed' : 'pointer' }}>
+                {loading ? 'Guardando…' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal confirmar borrar */}
+      {modal === 'delete' && current && (
+        <div role="dialog" aria-modal="true" aria-label="Confirmar eliminación"
+          style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          onClick={e => { if (e.target === e.currentTarget) close(); }}>
+          <div style={{ background: '#16171A', border: '1px solid var(--border)', borderRadius: '14px',
+            padding: '28px', width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>Eliminar sede</h2>
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-sec)' }}>
+              ¿Eliminar «{current.name}»? Esta acción no se puede deshacer.
+            </p>
+            {err && <p style={{ margin: 0, fontSize: '13px', color: 'var(--red)' }}>{err}</p>}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={close} style={btnSecondary}>Cancelar</button>
+              <button type="button" onClick={confirmDelete} disabled={loading}
+                style={{ ...btnDanger, opacity: loading ? 0.7 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
+                {loading ? 'Eliminando…' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pestaña Tokens de alta
+// ---------------------------------------------------------------------------
+
+function TokensTab({
+  tokens, sites, clientId, role, onRefresh,
+}: {
+  tokens:    TokenRow[];
+  sites:     SiteRow[];
+  clientId:  string;
+  role:       string;
+  onRefresh: () => void;
+}) {
+  const [modal,       setModal]       = useState<'create' | 'show' | 'revoke' | 'rotate_confirm' | 'rotate_show' | null>(null);
+  const [current,     setCurrent]     = useState<TokenRow | null>(null);
+  const [fullToken,   setFullToken]   = useState<string | null>(null);
+  const [label,       setLabel]       = useState('');
+  const [siteId,      setSiteId]      = useState<string>('');
+  const [loading,     setLoading]     = useState(false);
+  const [err,         setErr]         = useState<string | null>(null);
+  const [copied,      setCopied]      = useState(false);
+
+  function openCreate() { setModal('create'); setLabel(''); setSiteId(''); setErr(null); setFullToken(null); }
+  function openRevoke(t: TokenRow) { setModal('revoke'); setCurrent(t); setErr(null); }
+  function openRotate(t: TokenRow) { setModal('rotate_confirm'); setCurrent(t); setErr(null); }
+  function close() { setModal(null); setCurrent(null); setFullToken(null); }
+
+  function copyCommand() {
+    if (!fullToken) return;
+    navigator.clipboard.writeText(`vylax-agent.exe --token ${fullToken}`).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function createNewToken() {
+    setLoading(true); setErr(null);
+    try {
+      const res = await fetch(`/api/clientes/${clientId}/tokens`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: label.trim() || `Token ${new Date().toLocaleDateString('es')}`, siteId: siteId || null }),
+      });
+      if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d.error ?? 'Error'); }
+      const data = await res.json() as { fullToken: string };
+      setFullToken(data.fullToken);
+      setModal('show');
+      onRefresh();
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Error'); }
+    finally { setLoading(false); }
+  }
+
+  async function confirmRevoke() {
+    if (!current) return;
+    setLoading(true); setErr(null);
+    try {
+      const res = await fetch(`/api/clientes/${clientId}/tokens/${current.id}/revoke`, { method: 'POST' });
+      if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d.error ?? 'Error'); }
+      close(); onRefresh();
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Error'); }
+    finally { setLoading(false); }
+  }
+
+  async function confirmRotate() {
+    if (!current) return;
+    setLoading(true); setErr(null);
+    try {
+      const res = await fetch(`/api/clientes/${clientId}/tokens/${current.id}/rotate`, { method: 'POST' });
+      if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d.error ?? 'Error'); }
+      const data = await res.json() as { fullToken: string };
+      setFullToken(data.fullToken);
+      setModal('rotate_show');
+      onRefresh();
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Error'); }
+    finally { setLoading(false); }
+  }
+
+  function fmtDate(iso: string | null) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('es', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  }
+
+  const inputStyle: React.CSSProperties = {
+    background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px',
+    color: 'var(--text)', padding: '9px 12px', font: 'inherit', fontSize: '13px',
+    width: '100%', outline: 'none', boxSizing: 'border-box',
+  };
+  const btnPrimary: React.CSSProperties = {
+    border: 0, background: 'var(--accent)', color: '#0B1220',
+    borderRadius: '8px', padding: '10px 16px',
+    font: 'inherit', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+  };
+  const btnSecondary: React.CSSProperties = {
+    border: '1px solid var(--border)', background: 'none', color: 'var(--text)',
+    borderRadius: '8px', padding: '10px 16px',
+    font: 'inherit', fontSize: '13px', cursor: 'pointer',
+  };
+  const btnDanger: React.CSSProperties = {
+    border: 0, background: 'var(--red)', color: '#fff',
+    borderRadius: '8px', padding: '10px 16px',
+    font: 'inherit', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+  };
+  const btnSmall = (base: React.CSSProperties): React.CSSProperties =>
+    ({ ...base, padding: '5px 12px', fontSize: '12px' });
+
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>Tokens de alta ({tokens.length})</h2>
+        {role === 'admin' && (
+          <button type="button" onClick={openCreate} style={btnPrimary}>+ Nuevo token</button>
+        )}
+      </div>
+
+      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '600px' }}>
+          <thead>
+            <tr style={{ color: 'var(--text-sec)', fontSize: '12px', textAlign: 'left' }}>
+              {['Etiqueta', 'Prefijo', 'Sede', 'Estado', 'Creado', 'Último uso', ...(role === 'admin' ? ['Acciones'] : [])].map(h => (
+                <th key={h} style={{ padding: '12px', fontWeight: 500, borderBottom: '1px solid var(--border)' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {tokens.length === 0 ? (
+              <tr><td colSpan={role === 'admin' ? 7 : 6} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-sec)' }}>
+                Sin tokens creados
+              </td></tr>
+            ) : tokens.map(t => (
+              <tr key={t.id}>
+                <td style={{ padding: '12px', borderBottom: '1px solid #232529', fontWeight: 500 }}>{t.label}</td>
+                <td style={{ padding: '12px', borderBottom: '1px solid #232529', fontFamily: 'monospace', fontSize: '12px', color: 'var(--accent)' }}>
+                  {t.tokenPrefix}…
+                </td>
+                <td style={{ padding: '12px', borderBottom: '1px solid #232529', color: 'var(--text-sec)' }}>
+                  {t.siteName ?? 'Asignación por IP'}
+                </td>
+                <td style={{ padding: '12px', borderBottom: '1px solid #232529' }}>
+                  <span style={{
+                    fontSize: '12px', fontWeight: 600, padding: '3px 9px', borderRadius: '999px',
+                    color: t.revokedAt ? 'var(--text-sec)' : 'var(--green)',
+                    background: t.revokedAt ? 'rgba(148,163,171,0.1)' : 'rgba(52,211,153,0.1)',
+                  }}>
+                    {t.revokedAt ? 'Revocado' : 'Activo'}
+                  </span>
+                </td>
+                <td style={{ padding: '12px', borderBottom: '1px solid #232529', color: 'var(--text-sec)' }}>{fmtDate(t.createdAt)}</td>
+                <td style={{ padding: '12px', borderBottom: '1px solid #232529', color: 'var(--text-sec)' }}>{fmtDate(t.lastUsedAt)}</td>
+                {role === 'admin' && (
+                  <td style={{ padding: '12px', borderBottom: '1px solid #232529' }}>
+                    <span style={{ display: 'flex', gap: '6px' }}>
+                      {!t.revokedAt && (
+                        <>
+                          <button type="button" onClick={() => openRotate(t)} style={btnSmall(btnSecondary)}>Rotar</button>
+                          <button type="button" onClick={() => openRevoke(t)} style={btnSmall(btnDanger)}>Revocar</button>
+                        </>
+                      )}
+                    </span>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modal crear token */}
+      {modal === 'create' && (
+        <div role="dialog" aria-modal="true" aria-label="Nuevo token de alta"
+          style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          onClick={e => { if (e.target === e.currentTarget) close(); }}>
+          <div style={{ background: '#16171A', border: '1px solid var(--border)', borderRadius: '14px',
+            padding: '28px', width: '100%', maxWidth: '480px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>Nuevo token de alta</h2>
+              <button type="button" onClick={close} aria-label="Cerrar"
+                style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '8px',
+                  color: 'var(--text-sec)', width: '32px', height: '32px', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18"/>
+                </svg>
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label style={{ fontSize: '13px', color: 'var(--text-sec)' }}>Etiqueta</label>
+              <input value={label} onChange={e => setLabel(e.target.value)} placeholder="p. ej. Oficina central" style={inputStyle} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label style={{ fontSize: '13px', color: 'var(--text-sec)' }}>Sede (opcional — sin sede: asignación por IP)</label>
+              <select value={siteId} onChange={e => setSiteId(e.target.value)}
+                style={{ ...inputStyle, cursor: 'pointer' }}>
+                <option value="">Asignación por IP</option>
+                {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            {err && <p style={{ margin: 0, fontSize: '13px', color: 'var(--red)' }}>{err}</p>}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={close} style={btnSecondary}>Cancelar</button>
+              <button type="button" onClick={createNewToken} disabled={loading}
+                style={{ ...btnPrimary, opacity: loading ? 0.7 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
+                {loading ? 'Generando…' : 'Generar token'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal mostrar token completo (crear o rotar) */}
+      {(modal === 'show' || modal === 'rotate_show') && fullToken && (
+        <div role="dialog" aria-modal="true" aria-label="Token generado"
+          style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          onClick={e => { if (e.target === e.currentTarget) close(); }}>
+          <div style={{ background: '#16171A', border: '1px solid var(--border)', borderRadius: '14px',
+            padding: '28px', width: '100%', maxWidth: '520px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>
+              {modal === 'rotate_show' ? 'Token rotado' : 'Token de alta generado'}
+            </h2>
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-sec)' }}>
+              Copia el comando ahora. Este token <strong style={{ color: 'var(--text)' }}>no se puede recuperar</strong> una vez cerrado este diálogo.
+            </p>
+            <div style={{
+              background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px',
+              padding: '12px 14px', fontFamily: 'monospace', fontSize: '12px', color: 'var(--accent)',
+              wordBreak: 'break-all', userSelect: 'all',
+            }}>
+              vylax-agent.exe --token {fullToken}
+            </div>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={copyCommand} style={btnSecondary}>
+                {copied ? '¡Copiado!' : 'Copiar comando de instalación'}
+              </button>
+              <button type="button" onClick={close} style={btnPrimary}>Hecho</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal confirmar revocar */}
+      {modal === 'revoke' && current && (
+        <div role="dialog" aria-modal="true" aria-label="Confirmar revocación"
+          style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          onClick={e => { if (e.target === e.currentTarget) close(); }}>
+          <div style={{ background: '#16171A', border: '1px solid var(--border)', borderRadius: '14px',
+            padding: '28px', width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>Revocar token</h2>
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-sec)' }}>
+              ¿Revocar «{current.label}»? Los equipos ya registrados con este token no se verán afectados.
+              No podrá usarse para registrar nuevos equipos.
+            </p>
+            {err && <p style={{ margin: 0, fontSize: '13px', color: 'var(--red)' }}>{err}</p>}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={close} style={btnSecondary}>Cancelar</button>
+              <button type="button" onClick={confirmRevoke} disabled={loading}
+                style={{ ...btnDanger, opacity: loading ? 0.7 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
+                {loading ? 'Revocando…' : 'Revocar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal confirmar rotar */}
+      {modal === 'rotate_confirm' && current && (
+        <div role="dialog" aria-modal="true" aria-label="Confirmar rotación"
+          style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          onClick={e => { if (e.target === e.currentTarget) close(); }}>
+          <div style={{ background: '#16171A', border: '1px solid var(--border)', borderRadius: '14px',
+            padding: '28px', width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>Rotar token</h2>
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-sec)' }}>
+              El token actual «{current.label}» quedará revocado al instante y se creará uno nuevo.
+              Los equipos ya registrados no se verán afectados.
+            </p>
+            {err && <p style={{ margin: 0, fontSize: '13px', color: 'var(--red)' }}>{err}</p>}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={close} style={btnSecondary}>Cancelar</button>
+              <button type="button" onClick={confirmRotate} disabled={loading}
+                style={{ ...btnPrimary, opacity: loading ? 0.7 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
+                {loading ? 'Rotando…' : 'Rotar token'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

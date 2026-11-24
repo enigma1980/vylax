@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/dal';
 import { getClientDetail, getDevicesForClient } from '@/lib/dashboard';
+import { getSites, getTokens } from '@/lib/sites-tokens';
 import { notFound } from 'next/navigation';
 import { ClientDetailView } from './ClientDetailView';
 
@@ -11,9 +12,11 @@ export default async function ClientePage({
   const session      = await getSession('page');
   const { clientId } = await params;
 
-  const [client, devices] = await Promise.all([
+  const [client, devices, sites, tokens] = await Promise.all([
     getClientDetail(session.orgId, clientId),
     getDevicesForClient(session.orgId, clientId).catch(() => null),
+    getSites(session.orgId, clientId).catch(() => []),
+    getTokens(session.orgId, clientId).catch(() => []),
   ]);
 
   if (!client) notFound();
@@ -22,6 +25,8 @@ export default async function ClientePage({
     <ClientDetailView
       client={client}
       devices={devices ?? []}
+      sites={sites}
+      tokens={tokens}
       role={session.role}
     />
   );
