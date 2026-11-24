@@ -54,12 +54,12 @@ function checkWindowsUpdate(windowsUpdate: unknown, now: Date): CheckStatus {
   return daysSince <= 45 ? 'ok' : 'warn';
 }
 
-/** osInfo: { build?: string } — comprueba contra la tabla de EOL */
+/** osInfo: { build?: string; name?: string } — comprueba contra la tabla de EOL según edición */
 function checkOs(osInfo: unknown, now: Date): CheckStatus {
   if (!osInfo || typeof osInfo !== 'object') return 'no-data';
-  const os = osInfo as { build?: string };
+  const os = osInfo as { build?: string; name?: string };
   if (!os.build) return 'no-data';
-  return isOsSupported(os.build, now) ? 'ok' : 'warn';
+  return isOsSupported(os.build, os.name, now) ? 'ok' : 'warn';
 }
 
 export function securityChecks(

@@ -21,26 +21,51 @@ describe('os-support', () => {
   // Fecha de referencia: 2026-11-24 (hoy)
   const NOW = new Date('2026-11-24T12:00:00Z');
 
-  it('W10 22H2 (19045) NO está soportado a fecha 2026-11-24', () => {
-    assert.equal(isOsSupported('19045', NOW), false);
+  it('W10 22H2 (19045) NO está soportado — todas las ediciones igual', () => {
+    assert.equal(isOsSupported('19045', null, NOW), false);
   });
 
-  it('W11 24H2 Enterprise (26100) SÍ está soportado (EOL abr 2027)', () => {
-    assert.equal(isOsSupported('26100', NOW), true);
+  it('W11 24H2 Enterprise (26100) SÍ está soportado (EOL oct 2028)', () => {
+    assert.equal(isOsSupported('26100', 'Windows 11 Enterprise', NOW), true);
+  });
+
+  it('W11 24H2 Pro (26100) NO está soportado (EOL oct 2026, antes de hoy)', () => {
+    assert.equal(isOsSupported('26100', 'Windows 11 Pro', NOW), false);
+  });
+
+  it('W11 23H2 Enterprise (22631) NO está soportado (EOL 10-nov-2026, antes de hoy)', () => {
+    assert.equal(isOsSupported('22631', 'Windows 11 Enterprise', NOW), false);
+  });
+
+  it('sin osName se usa tabla Pro (más conservadora)', () => {
+    // Sin osName, 26100 usa Pro: EOL 2026-10-13 → no soportado
+    assert.equal(isOsSupported('26100', null, NOW), false);
   });
 
   it('build con parte menor (19045.6466) extrae el build mayor', () => {
-    assert.equal(isOsSupported('19045.6466', NOW), false);
+    assert.equal(isOsSupported('19045.6466', null, NOW), false);
   });
 
   it('build desconocido → no soportado (conservador)', () => {
-    assert.equal(isOsSupported('99999', NOW), false);
+    assert.equal(isOsSupported('99999', null, NOW), false);
   });
 
-  it('getEolDate devuelve la fecha correcta para 19045', () => {
+  it('getEolDate con W10 22H2 devuelve la fecha correcta (igual en todas las ediciones)', () => {
     const d = getEolDate('19045');
     assert.ok(d instanceof Date);
     assert.equal(d!.toISOString().slice(0, 10), '2025-10-14');
+  });
+
+  it('getEolDate con W11 24H2 Enterprise devuelve oct 2028', () => {
+    const d = getEolDate('26100', 'Windows 11 Enterprise');
+    assert.ok(d instanceof Date);
+    assert.equal(d!.toISOString().slice(0, 10), '2028-10-10');
+  });
+
+  it('getEolDate con W11 24H2 Pro devuelve oct 2026', () => {
+    const d = getEolDate('26100', 'Windows 11 Pro');
+    assert.ok(d instanceof Date);
+    assert.equal(d!.toISOString().slice(0, 10), '2026-10-13');
   });
 
   it('getEolDate devuelve null para build desconocido', () => {
@@ -48,7 +73,12 @@ describe('os-support', () => {
   });
 
   it('Server 2022 (20348) está soportado (EOL oct 2031)', () => {
-    assert.equal(isOsSupported('20348', NOW), true);
+    // Server usa tabla Enterprise automáticamente por fallback
+    assert.equal(isOsSupported('20348', 'Windows Server 2022 Standard', NOW), true);
+  });
+
+  it('Server build sin nombre también encuentra EOL (fallback a tabla Enterprise)', () => {
+    assert.equal(isOsSupported('20348', null, NOW), true);
   });
 });
 
@@ -87,8 +117,8 @@ describe('securityChecks', () => {
 
   const AV_OK   = [{ product: 'Windows Defender', enabled: true,  up_to_date: true }];
   const AV_FAIL = [{ product: 'Windows Defender', enabled: true,  up_to_date: false }];
-  const OS_OK   = { build: '26100' }; // soportado
-  const OS_OLD  = { build: '19045' }; // no soportado
+  const OS_OK   = { build: '26100', name: 'Windows 11 Enterprise' }; // soportado (Enterprise EOL oct 2028)
+  const OS_OLD  = { build: '19045', name: 'Windows 10 Pro' };       // no soportado
   const WU_OK   = { last_installed_at: RECENT_UPDATE };
   const WU_OLD  = { last_installed_at: OLD_UPDATE };
 
