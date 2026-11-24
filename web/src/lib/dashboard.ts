@@ -50,6 +50,106 @@ export interface OverviewData {
 
 const SEM_ORDER: Record<SemaphoreLevel, number> = { crit: 0, warn: 1, ok: 2 };
 
+export async function getClientList(orgId: string): Promise<ClientOverview[]> {
+  const now = new Date();
+
+  const allClients = await db
+    .select({ id: clients.id, name: clients.name })
+    .from(clients)
+    .where(eq(clients.organizationId, orgId))
+    .orderBy(clients.name);
+
+  if (allClients.length === 0) return [];
+
+  const clientIds = allClients.map(c => c.id);
+
+  const [activeRows, latestEventsRaw, siteCounts] = await Promise.all([
+    db
+      .select({
+        id:             devices.id,
+        hostname:       devices.hostname,
+        deviceType:     devices.deviceType,
+        deviceTypeHint: devices.deviceTypeHint,
+        lastSeenAt:     devices.lastSeenAt,
+        clientId:       devices.clientId,
+      })
+      .from(devices)
+      .where(
+        and(
+          eq(devices.organizationId, orgId),
+          ne(devices.status, 'uninstalled'),
+          ne(devices.status, 'pending_assignment'),
+          inArray(devices.clientId, clientIds),
+        ),
+      ),
+
+    db.execute<{ device_id: string; event_type: string }>(sql`
+      SELECT DISTINCT ON (device_id) device_id, event_type
+      FROM agent_events
+      WHERE organization_id = ${orgId}
+      ORDER BY device_id, occurred_at DESC
+    `),
+
+    db
+      .select({ clientId: sites.clientId, cnt: count() })
+      .from(sites)
+      .where(inArray(sites.clientId, clientIds))
+      .groupBy(sites.clientId),
+  ]);
+
+  const eventMap = new Map(
+    (latestEventsRaw as Array<{ device_id: string; event_type: string }>)
+      .map(r => [r.device_id, r.event_type]),
+  );
+
+  const classified = activeRows.map(row => {
+    const effType = effectiveDeviceType(row);
+    return {
+      ...row,
+      effType,
+      status: classifyDevice(row.lastSeenAt, effType, eventMap.get(row.id) ?? null, now),
+    };
+  });
+
+  const devicesByClient = new Map<string, typeof classified>();
+  for (const d of classified) {
+    if (!d.clientId) continue;
+    if (!devicesByClient.has(d.clientId)) devicesByClient.set(d.clientId, []);
+    devicesByClient.get(d.clientId)!.push(d);
+  }
+
+  const siteCountMap = new Map(siteCounts.map(r => [r.clientId, Number(r.cnt)]));
+
+  const list = allClients.map(c => {
+    const devs      = devicesByClient.get(c.id) ?? [];
+    const online    = devs.filter(d => d.status === 'online').length;
+    const total     = devs.length;
+    const semaphore = clientSemaphore(devs.map(d => ({ status: d.status as DeviceStatus, type: d.effType })));
+    const noRepDevs = devs.filter(d => d.status === 'no_report');
+    const reason    = total === 0
+      ? 'Sin equipos'
+      : noRepDevs.length > 0
+        ? `${noRepDevs[0].hostname} sin reportar`
+        : 'Sin incidencias';
+
+    return {
+      id:      c.id,
+      name:    c.name,
+      sites:   siteCountMap.get(c.id) ?? 0,
+      online,
+      total,
+      servers: devs.filter(d => d.effType === 'server').length,
+      pcs:     devs.filter(d => d.effType === 'pc').length,
+      laptops: devs.filter(d => d.effType === 'laptop').length,
+      semaphore,
+      reason,
+    };
+  });
+
+  list.sort((a, b) => SEM_ORDER[a.semaphore] - SEM_ORDER[b.semaphore]);
+  return list;
+}
+
 export async function getOverviewData(orgId: string): Promise<OverviewData> {
   const now = new Date();
 

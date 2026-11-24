@@ -1,8 +1,17 @@
-export default function ClientesPage() {
+import { getSession } from '@/lib/dal';
+import { getClientList } from '@/lib/dashboard';
+import { ClientGrid } from '../ClientGrid';
+
+export default async function ClientesPage() {
+  const session = await getSession('page');
+  const list    = await getClientList(session.orgId);
+
   return (
-    <div className="soon-wrap">
-      <h1 className="soon-title">Clientes</h1>
-      <p className="soon-sub">Próximamente</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 600 }}>Clientes</h1>
+      </div>
+      <ClientGrid clients={list} role={session.role} />
     </div>
   );
 }

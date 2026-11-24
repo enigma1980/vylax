@@ -21,7 +21,8 @@
     "dev:seed-demo": "dotenv -e .env.local -- tsx scripts/seed-demo.ts",
     "test:dashboard": "dotenv -e .env.local -- tsx --test test/device-status.test.ts test/dashboard-isolation.test.ts test/dashboard-overview.test.ts",
     "test:checks": "tsx --test test/device-checks.test.ts",
-    "test:enroll": "dotenv -e .env.local -- tsx --test test/enroll-ip-revoke.test.ts"
+    "test:enroll": "dotenv -e .env.local -- tsx --test test/enroll-ip-revoke.test.ts",
+    "test:clientes": "dotenv -e .env.local -- tsx --test test/clientes.test.ts"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.2",
