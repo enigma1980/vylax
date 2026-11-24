@@ -243,7 +243,25 @@ html, body {
 
 /* ── Panel ──────────────────────────────────────────────────── */
 
-.panel-wrap { min-height: 100dvh; display: flex; flex-direction: column; }
+.panel-wrap {
+  min-height: 100dvh; display: flex; flex-direction: column;
+  background: #111214; color: #E7E8EA;
+  /* Paleta Mix — solo para el panel; no afecta al login */
+  --bg:         #111214;
+  --card:       #1A1B1E;
+  --sidebar-bg: #16171A;
+  --border:     #2B2D31;
+  --text:       #E7E8EA;
+  --text-sec:   #9EA3AB;
+  --text-muted: #C9CCD1;
+  --accent:     #4C8DFF;
+  --accent-lt:  #7AA8FF;
+  --green:      #3DD68C;
+  --amber:      #F5B942;
+  --red:        #F06A6A;
+  --active-nav: #1F2A44;
+  --input-bg:   #1A1B1E;
+}
 
 .panel-header {
   flex-shrink: 0;
@@ -265,7 +283,7 @@ html, body {
 
 .search-wrap {
   display: flex; align-items: center; gap: 8px;
-  background: var(--bg); border: 1px solid var(--border);
+  background: var(--input-bg); border: 1px solid var(--border);
   border-radius: 8px; padding: 8px 12px;
   font-size: 14px; color: var(--text-sec);
 }

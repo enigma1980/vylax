@@ -42,16 +42,15 @@ describe('applyFilters — sin sede', () => {
     assert.equal(applyFilters(devices, '', 'all').length, 4);
   });
 
-  it('online → solo en línea', () => {
-    const r = applyFilters(devices, '', 'online');
-    assert.equal(r.length, 2);
-    assert.ok(r.every(d => d.status === 'online'));
-  });
-
-  it('no_report → solo sin reportar', () => {
-    const r = applyFilters(devices, '', 'no_report');
+  it('con_avisos → solo con issues', () => {
+    const devWithIssues = [
+      ...devices,
+      makeDevice({ id: '5', hostname: 'AV-01', effType: 'pc', status: 'online', siteId: SITE_A,
+        antivirus: [{ product: 'Defender', enabled: false, up_to_date: false }] }),
+    ];
+    const r = applyFilters(devWithIssues, '', 'con_avisos');
     assert.equal(r.length, 1);
-    assert.equal(r[0].hostname, 'LAP-01');
+    assert.equal(r[0].hostname, 'AV-01');
   });
 
   it('server → solo servidores', () => {
@@ -90,12 +89,11 @@ describe('applyFilters — con sede', () => {
 describe('computeCounts', () => {
   it('sin sede → contadores globales', () => {
     const c = computeCounts(devices, '');
-    assert.equal(c.all,       4);
-    assert.equal(c.online,    2);
-    assert.equal(c.no_report, 1);
-    assert.equal(c.server,    1);
-    assert.equal(c.pc,        2);
-    assert.equal(c.laptop,    1);
+    assert.equal(c.all,        4);
+    assert.equal(c.con_avisos, 0);
+    assert.equal(c.server,     1);
+    assert.equal(c.pc,         2);
+    assert.equal(c.laptop,     1);
   });
 
   it('sede A → contadores parciales', () => {
