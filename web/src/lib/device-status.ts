@@ -39,6 +39,13 @@ export function classifyDevice(
   return 'disconnected';
 }
 
+export function effectiveDeviceType(device: {
+  deviceType?: string | null;
+  deviceTypeHint?: string | null;
+}): string | null {
+  return device.deviceType ?? device.deviceTypeHint ?? null;
+}
+
 const CRIT_TYPES = new Set(['server', 'nas', 'sai']);
 
 export function clientSemaphore(

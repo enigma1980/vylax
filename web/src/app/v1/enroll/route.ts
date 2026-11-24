@@ -5,8 +5,10 @@ import {
   enrollmentTokens,
   devices,
   deviceCurrentState,
+  sites,
+  agentEvents,
 } from '@/db/schema';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
   sha256hex,
   generateDeviceSecret,
@@ -24,6 +26,25 @@ const PLACEHOLDER_UUIDS = new Set([
 
 function isPlaceholderUuid(uuid: string): boolean {
   return PLACEHOLDER_UUIDS.has(uuid.toLowerCase());
+}
+
+/** Busca la sede del cliente cuya lista public_ips contiene la IP del agente. */
+async function resolveSiteByIp(
+  clientId: string | null,
+  siteIdFromToken: string | null,
+  publicIp: string | null,
+): Promise<string | null> {
+  if (siteIdFromToken) return siteIdFromToken;
+  if (!clientId || !publicIp) return null;
+  const rows = await db
+    .select({ id: sites.id })
+    .from(sites)
+    .where(and(
+      eq(sites.clientId, clientId),
+      sql`${sites.publicIps} @> ARRAY[${publicIp}]::text[]`,
+    ))
+    .limit(1);
+  return rows[0]?.id ?? null;
 }
 
 function getClientIp(req: NextRequest): string | null {
@@ -114,6 +135,13 @@ async function handleEnroll(
     existingDevice = existing[0] ?? null;
   }
 
+  // Resolver sede por IP si el token es de cliente sin sede específica
+  const resolvedSiteId = await resolveSiteByIp(
+    matchedToken.clientId,
+    matchedToken.siteId,
+    publicIp,
+  );
+
   // Generar nueva credencial
   const secret = generateDeviceSecret();
   const credentialHash = sha256hex(secret);
@@ -125,19 +153,21 @@ async function handleEnroll(
     // Reinstalación: reutilizar el mismo device_id, rotar credencial
     const finalClientId = matchedToken.clientId ?? existingDevice.clientId;
     deviceStatus = finalClientId ? 'active' : 'pending_assignment';
+    const wasRevoked = existingDevice.credentialRevokedAt !== null;
 
     await db
       .update(devices)
       .set({
-        hostname:          data.hostname,
-        status:            deviceStatus,
+        hostname:             data.hostname,
+        status:               deviceStatus,
         credentialHash,
-        enrollmentTokenId: matchedToken.id,
-        clientId:          finalClientId,
-        siteId:            matchedToken.siteId ?? existingDevice.siteId,
-        agentVersion:      data.agent_version ?? null,
+        credentialRevokedAt:  null,
+        enrollmentTokenId:    matchedToken.id,
+        clientId:             finalClientId,
+        siteId:               resolvedSiteId ?? existingDevice.siteId,
+        agentVersion:         data.agent_version ?? null,
         publicIp,
-        uninstalledAt:     null,
+        uninstalledAt:        null,
       })
       .where(eq(devices.id, existingDevice.id));
 
@@ -148,6 +178,16 @@ async function handleEnroll(
       deviceId,
       organizationId: orgId,
     }).onConflictDoNothing();
+
+    // Registrar re-alta cuando la credencial estaba revocada
+    if (wasRevoked) {
+      await db.insert(agentEvents).values({
+        deviceId,
+        organizationId: orgId,
+        eventType:  'device_reenrolled',
+        occurredAt: new Date(),
+      }).onConflictDoNothing();
+    }
   } else {
     // Alta nueva
     deviceStatus = matchedToken.clientId ? 'active' : 'pending_assignment';
@@ -156,7 +196,7 @@ async function handleEnroll(
       .values({
         organizationId:      orgId,
         clientId:            matchedToken.clientId,
-        siteId:              matchedToken.siteId,
+        siteId:              resolvedSiteId,
         hostname:            data.hostname,
         status:              deviceStatus,
         deviceTypeHint:      data.device_type_hint ?? null,

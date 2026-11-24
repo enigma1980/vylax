@@ -182,10 +182,13 @@ export const devices = pgTable(
     credentialHash:     text('credential_hash').notNull(), // SHA-256 hex del device_secret
     configVersion:      integer('config_version').notNull().default(1),
     enrollmentTokenId:  uuid('enrollment_token_id').references(() => enrollmentTokens.id),
-    agentVersion:       text('agent_version'),
-    createdAt:          tstz('created_at').notNull().defaultNow(),
-    uninstalledAt:      tstz('uninstalled_at'),
-    lastSeenAt:         tstz('last_seen_at'),
+    agentVersion:         text('agent_version'),
+    deviceType:           text('device_type'),          // 'server'|'desktop'|'laptop'|'nas'|'ups'|null — confirmado por admin
+    criticalServices:     jsonb('critical_services'),   // string[] de nombres internos de servicio (MSSQLSERVER…)
+    credentialRevokedAt:  tstz('credential_revoked_at'), // non-null → el agente recibe 401
+    createdAt:            tstz('created_at').notNull().defaultNow(),
+    uninstalledAt:        tstz('uninstalled_at'),
+    lastSeenAt:           tstz('last_seen_at'),
   },
   (t) => [
     index('devices_org_idx').on(t.organizationId),

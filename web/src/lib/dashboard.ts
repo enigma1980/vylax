@@ -4,6 +4,7 @@ import { eq, and, ne, count, isNotNull, sql, inArray } from 'drizzle-orm';
 import {
   classifyDevice,
   clientSemaphore,
+  effectiveDeviceType,
   type DeviceStatus,
   type SemaphoreLevel,
 } from '@/lib/device-status';
@@ -56,13 +57,14 @@ export async function getOverviewData(orgId: string): Promise<OverviewData> {
     await Promise.all([
       db
         .select({
-          id:           devices.id,
-          hostname:     devices.hostname,
-          type:         devices.deviceTypeHint,
-          lastSeenAt:   devices.lastSeenAt,
-          clientId:     devices.clientId,
-          lastDailyAt:  deviceCurrentState.lastDailyAt,
-          windowsUpdate: deviceCurrentState.windowsUpdate,
+          id:             devices.id,
+          hostname:       devices.hostname,
+          deviceType:     devices.deviceType,
+          deviceTypeHint: devices.deviceTypeHint,
+          lastSeenAt:     devices.lastSeenAt,
+          clientId:       devices.clientId,
+          lastDailyAt:    deviceCurrentState.lastDailyAt,
+          windowsUpdate:  deviceCurrentState.windowsUpdate,
         })
         .from(devices)
         .leftJoin(deviceCurrentState, eq(devices.id, deviceCurrentState.deviceId))
@@ -136,10 +138,14 @@ export async function getOverviewData(orgId: string): Promise<OverviewData> {
       .map(r => [r.device_id, r.event_type]),
   );
 
-  const classified = activeRows.map(row => ({
-    ...row,
-    status: classifyDevice(row.lastSeenAt, row.type, eventMap.get(row.id) ?? null, now),
-  }));
+  const classified = activeRows.map(row => {
+    const effType = effectiveDeviceType(row);
+    return {
+      ...row,
+      effType,
+      status: classifyDevice(row.lastSeenAt, effType, eventMap.get(row.id) ?? null, now),
+    };
+  });
 
   const totalDevices = classified.length;
   const onlineCount  = classified.filter(d => d.status === 'online').length;
@@ -210,7 +216,7 @@ export async function getOverviewData(orgId: string): Promise<OverviewData> {
       const devs       = clientDeviceMap.get(c.id) ?? [];
       const online     = devs.filter(d => d.status === 'online').length;
       const total      = devs.length;
-      const semaphore  = clientSemaphore(devs.map(d => ({ status: d.status as DeviceStatus, type: d.type })));
+      const semaphore  = clientSemaphore(devs.map(d => ({ status: d.status as DeviceStatus, type: d.effType })));
       const noRepDevs  = devs.filter(d => d.status === 'no_report');
       const reason     = noRepDevs.length > 0 ? `${noRepDevs[0].hostname} sin reportar` : 'Sin incidencias';
 
@@ -220,9 +226,9 @@ export async function getOverviewData(orgId: string): Promise<OverviewData> {
         sites:   siteCountMap.get(c.id) ?? 0,
         online,
         total,
-        servers: devs.filter(d => d.type === 'server').length,
-        pcs:     devs.filter(d => d.type === 'pc').length,
-        laptops: devs.filter(d => d.type === 'laptop').length,
+        servers: devs.filter(d => d.effType === 'server').length,
+        pcs:     devs.filter(d => d.effType === 'pc').length,
+        laptops: devs.filter(d => d.effType === 'laptop').length,
         semaphore,
         reason,
       };

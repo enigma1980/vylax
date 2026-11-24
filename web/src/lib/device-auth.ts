@@ -11,6 +11,7 @@ export type AuthedDevice = {
   siteId: string | null;
   status: string;
   configVersion: number;
+  criticalServices: unknown;
 };
 
 export async function authenticateDevice(
@@ -33,6 +34,8 @@ export async function authenticateDevice(
       status: devices.status,
       credentialHash: devices.credentialHash,
       configVersion: devices.configVersion,
+      credentialRevokedAt: devices.credentialRevokedAt,
+      criticalServices: devices.criticalServices,
     })
     .from(devices)
     .where(eq(devices.id, deviceId))
@@ -42,6 +45,8 @@ export async function authenticateDevice(
   const device = rows[0];
 
   if (!safeCompareHex(secretHash, device.credentialHash)) return null;
+  // Credencial revocada por un admin → 401
+  if (device.credentialRevokedAt !== null) return null;
   // Dispositivo desinstalado: credenciales válidas pero equipo eliminado → 410
   if (device.status === 'uninstalled') return 'gone';
 
@@ -52,5 +57,6 @@ export async function authenticateDevice(
     siteId: device.siteId,
     status: device.status,
     configVersion: device.configVersion,
+    criticalServices: device.criticalServices,
   };
 }

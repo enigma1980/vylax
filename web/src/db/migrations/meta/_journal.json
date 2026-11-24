@@ -36,6 +36,13 @@
       "when": 1795708800000,
       "tag": "0004_paso5a_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795795200000,
+      "tag": "0005_paso5b_devices",
+      "breakpoints": true
     }
   ]
 }
