@@ -167,9 +167,9 @@ export function ClientDetailView({ client, devices, role }: Props) {
 
         {/* Cabecera del cliente */}
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
             <Link href="/clientes"
-              style={{ color: 'var(--text-sec)', fontSize: '22px', lineHeight: 1, textDecoration: 'none', flexShrink: 0 }}
+              style={{ color: 'var(--text-sec)', fontSize: '22px', lineHeight: '1.3', textDecoration: 'none', flexShrink: 0 }}
               onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
               onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-sec)')}
               aria-label="Volver a Clientes">
