@@ -328,9 +328,11 @@ export function ClientDetailView({ client, devices, sites, tokens, role }: Props
 
         {/* Pestaña Ajustes */}
         {tab === 'ajustes' && (
-          <div className="soon-wrap">
-            <p className="soon-sub">Ajustes — se implementa en la parte 5 del plan</p>
-          </div>
+          <AjustesTab
+            client={client}
+            onRefresh={() => router.refresh()}
+            onDeleted={() => router.push('/clientes')}
+          />
         )}
       </section>
 
@@ -1208,6 +1210,196 @@ function TokensTab({
         </div>
       )}
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pestaña Ajustes
+// ---------------------------------------------------------------------------
+
+function AjustesTab({
+  client,
+  onRefresh,
+  onDeleted,
+}: {
+  client: ClientDetail;
+  onRefresh: () => void;
+  onDeleted: () => void;
+}) {
+  const [newName,       setNewName]       = useState(client.name);
+  const [renameLoading, setRenameLoading] = useState(false);
+  const [renameErr,     setRenameErr]     = useState<string | null>(null);
+  const [renameOk,      setRenameOk]      = useState(false);
+
+  const [delOpen,    setDelOpen]    = useState(false);
+  const [confirmTxt, setConfirmTxt] = useState('');
+  const [delLoading, setDelLoading] = useState(false);
+  const [delErr,     setDelErr]     = useState<string | null>(null);
+
+  async function saveRename() {
+    setRenameLoading(true); setRenameErr(null); setRenameOk(false);
+    try {
+      const res = await fetch(`/api/clientes/${client.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim() }),
+      });
+      if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d.error ?? 'Error'); }
+      setRenameOk(true);
+      onRefresh();
+    } catch (e) { setRenameErr(e instanceof Error ? e.message : 'Error'); }
+    finally { setRenameLoading(false); }
+  }
+
+  async function confirmDelete() {
+    setDelLoading(true); setDelErr(null);
+    try {
+      const res = await fetch(`/api/clientes/${client.id}`, { method: 'DELETE' });
+      if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d.error ?? 'Error'); }
+      onDeleted();
+    } catch (e) {
+      setDelErr(e instanceof Error ? e.message : 'Error');
+      setDelLoading(false);
+    }
+  }
+
+  function closeDelModal() { setDelOpen(false); setConfirmTxt(''); setDelErr(null); }
+
+  const inputStyle: React.CSSProperties = {
+    background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px',
+    color: 'var(--text)', padding: '9px 12px', font: 'inherit', fontSize: '13px',
+    width: '100%', outline: 'none', boxSizing: 'border-box',
+  };
+  const btnPrimary: React.CSSProperties = {
+    border: 0, background: 'var(--accent)', color: '#0B1220',
+    borderRadius: '8px', padding: '10px 16px',
+    font: 'inherit', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+  };
+  const btnSecondary: React.CSSProperties = {
+    border: '1px solid var(--border)', background: 'none', color: 'var(--text)',
+    borderRadius: '8px', padding: '10px 16px',
+    font: 'inherit', fontSize: '13px', cursor: 'pointer',
+  };
+  const btnDanger: React.CSSProperties = {
+    border: 0, background: 'var(--red)', color: '#fff',
+    borderRadius: '8px', padding: '10px 16px',
+    font: 'inherit', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+  };
+
+  const renameDirty    = newName.trim() !== '' && newName.trim() !== client.name;
+  const renameDisabled = renameLoading || !renameDirty;
+  const delDisabled    = delLoading || confirmTxt !== client.name;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '540px' }}>
+
+      {/* Nombre del cliente */}
+      <section style={{
+        background: 'var(--card)', border: '1px solid var(--border)',
+        borderRadius: '12px', padding: '20px',
+        display: 'flex', flexDirection: 'column', gap: '14px',
+      }}>
+        <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>Nombre del cliente</h2>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <input
+            value={newName}
+            onChange={e => { setNewName(e.target.value); setRenameOk(false); setRenameErr(null); }}
+            maxLength={200}
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button type="button" onClick={saveRename} disabled={renameDisabled}
+            style={{
+              ...btnPrimary,
+              opacity: renameDisabled ? 0.6 : 1,
+              cursor:  renameDisabled ? 'not-allowed' : 'pointer',
+              whiteSpace: 'nowrap',
+            }}>
+            {renameLoading ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+        {renameOk  && <p style={{ margin: 0, fontSize: '13px', color: 'var(--green)' }}>Nombre actualizado correctamente</p>}
+        {renameErr && <p style={{ margin: 0, fontSize: '13px', color: 'var(--red)'   }}>{renameErr}</p>}
+      </section>
+
+      {/* Zona peligrosa */}
+      <section style={{
+        background: 'var(--card)', borderRadius: '12px', padding: '20px',
+        border: '1px solid rgba(248,113,113,0.3)',
+        display: 'flex', flexDirection: 'column', gap: '14px',
+      }}>
+        <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--red)' }}>Zona peligrosa</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 260px' }}>
+            <p style={{ margin: 0, fontSize: '13px', fontWeight: 600 }}>Eliminar cliente</p>
+            <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-sec)' }}>
+              Elimina permanentemente el cliente, todas sus sedes y tokens de alta.
+              Bloqueado si tiene algún equipo (incluidos desinstalados).
+            </p>
+          </div>
+          <button type="button" onClick={() => setDelOpen(true)} style={btnDanger}>
+            Eliminar cliente
+          </button>
+        </div>
+      </section>
+
+      {/* Modal confirmación eliminar */}
+      {delOpen && (
+        <div
+          role="dialog" aria-modal="true" aria-label="Confirmar eliminación del cliente"
+          style={{
+            position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+          }}
+          onClick={e => { if (e.target === e.currentTarget && !delLoading) closeDelModal(); }}>
+          <div style={{
+            background: '#16171A', border: '1px solid var(--border)', borderRadius: '14px',
+            padding: '28px', width: '100%', maxWidth: '440px',
+            display: 'flex', flexDirection: 'column', gap: '16px',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>Eliminar cliente</h2>
+              <button type="button" onClick={closeDelModal} aria-label="Cerrar"
+                style={{
+                  background: 'none', border: '1px solid var(--border)', borderRadius: '8px',
+                  color: 'var(--text-sec)', width: '32px', height: '32px', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18"/>
+                </svg>
+              </button>
+            </div>
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-sec)' }}>
+              Esta acción eliminará permanentemente el cliente, todas sus sedes y tokens.
+              <strong style={{ color: 'var(--text)' }}> No se puede deshacer.</strong>
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '13px', color: 'var(--text-sec)' }}>
+                Para confirmar, escribe{' '}
+                <strong style={{ color: 'var(--text)' }}>{client.name}</strong>
+              </label>
+              <input
+                value={confirmTxt}
+                onChange={e => { setConfirmTxt(e.target.value); setDelErr(null); }}
+                placeholder={client.name}
+                autoFocus
+                style={inputStyle}
+              />
+            </div>
+            {delErr && <p style={{ margin: 0, fontSize: '13px', color: 'var(--red)' }}>{delErr}</p>}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={closeDelModal} disabled={delLoading} style={btnSecondary}>
+                Cancelar
+              </button>
+              <button type="button" onClick={confirmDelete} disabled={delDisabled}
+                style={{ ...btnDanger, opacity: delDisabled ? 0.5 : 1, cursor: delDisabled ? 'not-allowed' : 'pointer' }}>
+                {delLoading ? 'Eliminando…' : 'Eliminar definitivamente'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -269,6 +269,70 @@ export async function revokeToken(orgId: string, userId: string, tokenId: string
   });
 }
 
+// ---------------------------------------------------------------------------
+// Clientes (renombrar y borrar)
+// ---------------------------------------------------------------------------
+
+export async function updateClient(
+  orgId: string,
+  userId: string,
+  clientId: string,
+  data: { name: string },
+): Promise<void> {
+  const client = await db.query.clients.findFirst({
+    where: and(eq(clients.id, clientId), eq(clients.organizationId, orgId)),
+  });
+  if (!client) notFound('Cliente no encontrado');
+
+  await db.transaction(async tx => {
+    await tx.update(clients)
+      .set({ name: data.name })
+      .where(and(eq(clients.id, clientId), eq(clients.organizationId, orgId)));
+    await tx.insert(auditLog).values({
+      userId, orgId, event: 'client_updated',
+      metadata: { clientId, name: data.name, previousName: client!.name },
+    });
+  });
+}
+
+export async function deleteClient(
+  orgId: string,
+  userId: string,
+  clientId: string,
+): Promise<void> {
+  const client = await db.query.clients.findFirst({
+    where: and(eq(clients.id, clientId), eq(clients.organizationId, orgId)),
+  });
+  if (!client) notFound('Cliente no encontrado');
+
+  const [result] = await db.select({ n: count() })
+    .from(devices)
+    .where(and(eq(devices.clientId, clientId), eq(devices.organizationId, orgId)));
+  const n = Number(result.n);
+  if (n > 0) {
+    conflict(
+      `No se puede eliminar el cliente: tiene ${n} equipo${n !== 1 ? 's' : ''}` +
+      (n > 0 ? ' (incluidos desinstalados)' : ''),
+    );
+  }
+
+  await db.transaction(async tx => {
+    await tx.delete(enrollmentTokens).where(
+      and(eq(enrollmentTokens.clientId, clientId), eq(enrollmentTokens.organizationId, orgId)),
+    );
+    await tx.delete(sites).where(
+      and(eq(sites.clientId, clientId), eq(sites.organizationId, orgId)),
+    );
+    await tx.delete(clients).where(
+      and(eq(clients.id, clientId), eq(clients.organizationId, orgId)),
+    );
+    await tx.insert(auditLog).values({
+      userId, orgId, event: 'client_deleted',
+      metadata: { clientId, name: client!.name },
+    });
+  });
+}
+
 export async function rotateToken(
   orgId: string,
   userId: string,
