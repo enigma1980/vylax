@@ -736,6 +736,120 @@ export async function getDevicesForClient(orgId: string, clientId: string): Prom
 }
 
 // ---------------------------------------------------------------------------
+// Todos los equipos de la org
+// ---------------------------------------------------------------------------
+
+export interface DeviceOrgRow extends DeviceRow {
+  clientId:   string | null;
+  clientName: string | null;
+  publicIp:   string | null;
+}
+
+export async function getDevicesForOrg(orgId: string): Promise<DeviceOrgRow[]> {
+  const now = new Date();
+
+  const rows = await db
+    .select({
+      id:               devices.id,
+      hostname:         devices.hostname,
+      deviceType:       devices.deviceType,
+      deviceTypeHint:   devices.deviceTypeHint,
+      lastSeenAt:       devices.lastSeenAt,
+      siteId:           devices.siteId,
+      clientId:         devices.clientId,
+      publicIp:         devices.publicIp,
+      clientName:       clients.name,
+      agentVersion:     deviceCurrentState.agentVersion,
+      cpuAvgPct:        deviceCurrentState.cpuAvgPct,
+      memoryUsedAvgPct: deviceCurrentState.memoryUsedAvgPct,
+      ramTotalBytes:    deviceCurrentState.ramTotalBytes,
+      volumes:          deviceCurrentState.volumes,
+      antivirus:        deviceCurrentState.antivirus,
+      windowsUpdate:    deviceCurrentState.windowsUpdate,
+      physicalDisks:    deviceCurrentState.physicalDisks,
+      osInfo:           deviceCurrentState.osInfo,
+      loggedOnUser:     deviceCurrentState.loggedOnUser,
+      agentMemBytes:    deviceCurrentState.agentMemBytes,
+      network:          deviceCurrentState.network,
+    })
+    .from(devices)
+    .leftJoin(deviceCurrentState, eq(devices.id, deviceCurrentState.deviceId))
+    .leftJoin(clients, eq(devices.clientId, clients.id))
+    .where(
+      and(
+        eq(devices.organizationId, orgId),
+        ne(devices.status, 'uninstalled'),
+        ne(devices.status, 'pending_assignment'),
+      ),
+    )
+    .orderBy(clients.name, devices.hostname);
+
+  if (rows.length === 0) return [];
+
+  const deviceIds = rows.map(r => r.id);
+
+  const eventRows = await db
+    .select({
+      deviceId:   agentEvents.deviceId,
+      eventType:  agentEvents.eventType,
+      occurredAt: agentEvents.occurredAt,
+    })
+    .from(agentEvents)
+    .where(and(
+      eq(agentEvents.organizationId, orgId),
+      inArray(agentEvents.deviceId, deviceIds),
+    ))
+    .orderBy(agentEvents.deviceId, desc(agentEvents.occurredAt));
+
+  const eventsByDevice = new Map<string, Array<{ eventType: string; occurredAt: Date }>>();
+  for (const ev of eventRows) {
+    if (!eventsByDevice.has(ev.deviceId)) eventsByDevice.set(ev.deviceId, []);
+    const list = eventsByDevice.get(ev.deviceId)!;
+    if (list.length < 10) list.push({ eventType: ev.eventType, occurredAt: ev.occurredAt! });
+  }
+
+  return rows.map(row => {
+    const effType     = effectiveDeviceType(row);
+    const devEvents   = eventsByDevice.get(row.id) ?? [];
+    const latestEvent = devEvents[0]?.eventType ?? null;
+    const status      = classifyDevice(row.lastSeenAt, effType, latestEvent, now);
+    const osInfo      = row.osInfo as { name?: string; build?: string; manufacturer?: string } | null;
+
+    return {
+      id:               row.id,
+      hostname:         row.hostname,
+      status,
+      effType,
+      deviceType:       row.deviceType,
+      deviceTypeHint:   row.deviceTypeHint,
+      siteId:           row.siteId,
+      lastSeenAt:       row.lastSeenAt?.toISOString() ?? null,
+      agentVersion:     row.agentVersion ?? null,
+      osName:           osInfo?.name ?? null,
+      osBuild:          osInfo?.build ?? null,
+      manufacturer:     osInfo?.manufacturer ?? null,
+      cpuAvgPct:        row.cpuAvgPct ?? null,
+      memoryUsedAvgPct: row.memoryUsedAvgPct ?? null,
+      ramTotalBytes:    row.ramTotalBytes ?? null,
+      volumes:          row.volumes as DeviceRow['volumes'],
+      antivirus:        row.antivirus as DeviceRow['antivirus'],
+      windowsUpdate:    row.windowsUpdate as DeviceRow['windowsUpdate'],
+      physicalDisks:    row.physicalDisks as DeviceRow['physicalDisks'],
+      loggedOnUser:     row.loggedOnUser ?? null,
+      agentMemBytes:    row.agentMemBytes ?? null,
+      network:          row.network as DeviceRow['network'],
+      lastEvents:       devEvents.slice(0, 3).map(e => ({
+        eventType:  e.eventType,
+        occurredAt: e.occurredAt.toISOString(),
+      })),
+      clientId:   row.clientId ?? null,
+      clientName: row.clientName ?? null,
+      publicIp:   row.publicIp ?? null,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Clientes con sedes — para el modal "Mover equipo"
 // ---------------------------------------------------------------------------
 
