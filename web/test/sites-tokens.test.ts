@@ -24,6 +24,7 @@ import {
   generateDeviceSecret,
 } from '../src/lib/crypto.js';
 import { createToken, createSite, deleteSite, rotateToken } from '../src/lib/sites-tokens.js';
+import { closeDb } from '../src/db/index.js';
 
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000';
 const skip     = !process.env.DATABASE_URL
@@ -123,7 +124,8 @@ after(async () => {
     await db.delete(schema.users).where(eq(schema.users.id, uid));
   }
   await db.delete(schema.organizations).where(inArray(schema.organizations.id, cleanup.orgs));
-  await sql.end();
+  await sql.end({ timeout: 5 });
+  await closeDb();
 });
 
 function apiPost(path: string, body: unknown, cookie: string) {

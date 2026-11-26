@@ -113,6 +113,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { inArray } from 'drizzle-orm';
 import * as schema from '../src/db/schema.js';
 import { getDevicesForClient } from '../src/lib/dashboard.js';
+import { closeDb } from '../src/db/index.js';
 
 const skip = !process.env.DATABASE_URL
   ? 'requiere DATABASE_URL (ejecuta con npm run test:client-devices)'
@@ -157,7 +158,8 @@ after(async () => {
   if (cleanup.orgs.length > 0) {
     await db.delete(schema.organizations).where(inArray(schema.organizations.id, cleanup.orgs));
   }
-  await sql.end();
+  await sql.end({ timeout: 5 });
+  await closeDb();
 });
 
 describe('getDevicesForClient — aislamiento multiempresa', { skip }, () => {

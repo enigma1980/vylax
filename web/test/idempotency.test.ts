@@ -76,7 +76,7 @@ after(async () => {
     await db.delete(schema.enrollmentTokens)  .where(eq(schema.enrollmentTokens.organizationId, orgId));
     await db.delete(schema.organizations)     .where(eq(schema.organizations.id, orgId));
   } finally {
-    await client.end();
+    await client.end({ timeout: 5 });
   }
 });
 

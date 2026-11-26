@@ -119,7 +119,7 @@ after(async () => {
     await db.delete(schema.organizations).where(inArray(schema.organizations.id, cleanup.orgs));
   }
 
-  await sql.end();
+  await sql.end({ timeout: 5 });
 });
 
 // ---------------------------------------------------------------------------

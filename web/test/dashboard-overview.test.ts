@@ -82,7 +82,7 @@ describe('getOverviewData con 3 clientes', { skip }, () => {
     }
     await db.delete(schema.organizations)
       .where(inArray(schema.organizations.id, cleanupIds.orgs));
-    await Promise.all([sql.end(), closeDb()]);
+    await Promise.all([sql.end({ timeout: 5 }), closeDb()]);
   });
 
   it('devuelve exactamente 3 clientes', async () => {

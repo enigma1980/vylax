@@ -124,7 +124,7 @@ after(async () => {
     }
   }
   await db.delete(schema.organizations).where(eq(schema.organizations.slug, 'test-org-2'));
-  await client.end();
+  await client.end({ timeout: 5 });
 });
 
 // ---------------------------------------------------------------------------

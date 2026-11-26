@@ -141,7 +141,7 @@ after(async () => {
       await db.delete(schema.organizations).where(eq(schema.organizations.id, org.id));
     }
   }
-  await client.end();
+  await client.end({ timeout: 5 });
 });
 
 describe('GET /api/search', { skip }, () => {

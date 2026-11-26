@@ -78,7 +78,7 @@ describe('aislamiento multiorg (nivel BD)', { skip }, () => {
       await db.delete(schema.clients).where(inArray(schema.clients.id, cleanupIds.clients));
     }
     await db.delete(schema.organizations).where(inArray(schema.organizations.id, cleanupIds.orgs));
-    await sql.end();
+    await sql.end({ timeout: 5 });
   });
 
   it('dispositivos de org1: exactamente 1', async () => {

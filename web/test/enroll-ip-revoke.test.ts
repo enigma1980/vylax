@@ -110,7 +110,7 @@ after(async () => {
   if (cleanup.clients.length > 0)
     await db.delete(schema.clients).where(inArray(schema.clients.id, cleanup.clients));
   await db.delete(schema.organizations).where(inArray(schema.organizations.id, cleanup.orgs));
-  await sql.end();
+  await sql.end({ timeout: 5 });
 });
 
 async function postEnroll(body: object, forwardedFor?: string) {

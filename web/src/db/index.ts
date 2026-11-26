@@ -4,4 +4,10 @@ import * as schema from './schema';
 
 const client = postgres(process.env.DATABASE_URL!);
 export const db = drizzle(client, { schema });
-export const closeDb = () => client.end();
+
+let _dbClosed = false;
+export const closeDb = async () => {
+  if (_dbClosed) return;
+  _dbClosed = true;
+  await client.end({ timeout: 5 });
+};
