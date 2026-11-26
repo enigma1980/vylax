@@ -464,6 +464,9 @@ export interface DeviceDetail {
   systemInfo:       { manufacturer?: string; model?: string; bios_version?: string; bios_date?: string } | null;
   cpuInfo:          { name?: string; cores?: number; logical_processors?: number } | null;
   memoryTotalBytes: number | null;
+  // configuración admin
+  criticalServices:    string[] | null;
+  credentialRevokedAt: string | null;
   // eventos
   agentEvents:      Array<{ eventType: string; occurredAt: string; data: unknown }>;
 }
@@ -471,16 +474,18 @@ export interface DeviceDetail {
 export async function getDevice(orgId: string, deviceId: string): Promise<DeviceDetail | null> {
   const row = await db
     .select({
-      id:               devices.id,
-      hostname:         devices.hostname,
-      deviceType:       devices.deviceType,
-      deviceTypeHint:   devices.deviceTypeHint,
-      agentVersion:     devices.agentVersion,
-      createdAt:        devices.createdAt,
-      clientId:         devices.clientId,
-      siteId:           devices.siteId,
-      lastSeenAt:       devices.lastSeenAt,
-      organizationId:   devices.organizationId,
+      id:                  devices.id,
+      hostname:            devices.hostname,
+      deviceType:          devices.deviceType,
+      deviceTypeHint:      devices.deviceTypeHint,
+      agentVersion:        devices.agentVersion,
+      createdAt:           devices.createdAt,
+      clientId:            devices.clientId,
+      siteId:              devices.siteId,
+      lastSeenAt:          devices.lastSeenAt,
+      organizationId:      devices.organizationId,
+      criticalServices:    devices.criticalServices,
+      credentialRevokedAt: devices.credentialRevokedAt,
       // estado
       cpuAvgPct:        deviceCurrentState.cpuAvgPct,
       memoryUsedAvgPct: deviceCurrentState.memoryUsedAvgPct,
@@ -574,10 +579,12 @@ export async function getDevice(orgId: string, deviceId: string): Promise<Device
     uptimeSecs:       r.uptimeSecs ?? null,
     lastBootAt:       r.lastBootAt?.toISOString() ?? null,
     rebootPending:    r.rebootPending ?? null,
-    systemInfo:       inv?.systemInfo as DeviceDetail['systemInfo'] ?? null,
-    cpuInfo:          inv?.cpuInfo as DeviceDetail['cpuInfo'] ?? null,
-    memoryTotalBytes: inv?.memoryTotalBytes ?? null,
-    agentEvents:      evRows.map(e => ({
+    systemInfo:          inv?.systemInfo as DeviceDetail['systemInfo'] ?? null,
+    cpuInfo:             inv?.cpuInfo as DeviceDetail['cpuInfo'] ?? null,
+    memoryTotalBytes:    inv?.memoryTotalBytes ?? null,
+    criticalServices:    (r.criticalServices as string[] | null) ?? null,
+    credentialRevokedAt: r.credentialRevokedAt?.toISOString() ?? null,
+    agentEvents:         evRows.map(e => ({
       eventType:  e.eventType,
       occurredAt: e.occurredAt.toISOString(),
       data:       e.data,
@@ -726,4 +733,37 @@ export async function getDevicesForClient(orgId: string, clientId: string): Prom
       })),
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Clientes con sedes — para el modal "Mover equipo"
+// ---------------------------------------------------------------------------
+
+export interface ClientSimple {
+  id:    string;
+  name:  string;
+  sites: Array<{ id: string; name: string }>;
+}
+
+export async function getClientsWithSites(orgId: string): Promise<ClientSimple[]> {
+  const clientRows = await db
+    .select({ id: clients.id, name: clients.name })
+    .from(clients)
+    .where(eq(clients.organizationId, orgId))
+    .orderBy(clients.name);
+
+  if (clientRows.length === 0) return [];
+
+  const clientIds = clientRows.map(c => c.id);
+  const siteRows = await db
+    .select({ id: sites.id, name: sites.name, clientId: sites.clientId })
+    .from(sites)
+    .where(and(eq(sites.organizationId, orgId), inArray(sites.clientId, clientIds)))
+    .orderBy(sites.name);
+
+  return clientRows.map(c => ({
+    id:    c.id,
+    name:  c.name,
+    sites: siteRows.filter(s => s.clientId === c.id).map(s => ({ id: s.id, name: s.name })),
+  }));
 }

@@ -1,12 +1,13 @@
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { getSession }                        from '@/lib/dal';
-import { getDevice, getDeviceMetrics }       from '@/lib/dashboard';
-import type { DeviceDetail, MetricPoint }    from '@/lib/dashboard';
-import { securityChecks, performanceChecks } from '@/lib/device-checks';
-import { BreadcrumbSetter }                  from './BreadcrumbSetter';
-import { PeriodSelect }                      from './PeriodSelect';
+import { getSession }                              from '@/lib/dal';
+import { getDevice, getDeviceMetrics, getClientsWithSites } from '@/lib/dashboard';
+import type { DeviceDetail, MetricPoint }            from '@/lib/dashboard';
+import { securityChecks, performanceChecks }         from '@/lib/device-checks';
+import { BreadcrumbSetter }                          from './BreadcrumbSetter';
+import { PeriodSelect }                              from './PeriodSelect';
+import { DeviceActions }                             from './DeviceActions';
 
 // ─── Colores y etiquetas ────────────────────────────────────────────────────
 
@@ -360,10 +361,13 @@ export default async function EquipoPage({
   const cpuPeriod: '24h' | '7d' = sp.cpuPeriod === '7d' ? '7d' : '24h';
   const memPeriod: '24h' | '7d' = sp.memPeriod === '7d' ? '7d' : '24h';
 
-  const [device, metricsCpu, metricsMem] = await Promise.all([
+  const isAdmin = session.role === 'admin';
+
+  const [device, metricsCpu, metricsMem, clientsWithSites] = await Promise.all([
     getDevice(session.orgId, deviceId),
     getDeviceMetrics(session.orgId, deviceId, cpuPeriod),
     getDeviceMetrics(session.orgId, deviceId, memPeriod),
+    isAdmin ? getClientsWithSites(session.orgId) : Promise.resolve([]),
   ]);
 
   if (!device) notFound();
@@ -790,6 +794,22 @@ export default async function EquipoPage({
             </div>
           </div>
         </section>
+
+        {/* ── Acciones admin ───────────────────────────────────────────── */}
+        {isAdmin && (
+          <div style={{
+            background: '#0F172A', border: '1px solid #1E293B', borderRadius: '12px',
+            padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px',
+          }}>
+            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Acciones</h2>
+            <DeviceActions
+              deviceId={device.id}
+              currentType={device.deviceType}
+              currentServices={device.criticalServices ?? []}
+              clientsWithSites={clientsWithSites}
+            />
+          </div>
+        )}
 
       </div>
     </>
