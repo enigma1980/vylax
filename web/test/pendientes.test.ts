@@ -127,10 +127,10 @@ after(async () => {
     await db.delete(schema.deviceCurrentState).where(inArray(schema.deviceCurrentState.deviceId, cleanup.devices));
     await db.delete(schema.devices).where(inArray(schema.devices.id, cleanup.devices));
   }
-  // Eliminar sedes y tokens antes de clientes (FK)
+  // Eliminar tokens, sedes y clientes (respetar FK: tokens → sedes → clientes)
   await db.delete(schema.enrollmentTokens).where(eq(schema.enrollmentTokens.organizationId, orgId));
-  await db.delete(schema.sites).where(eq(schema.sites.organizationId, orgId));
   if (cleanup.clients.length > 0) {
+    await db.delete(schema.sites).where(inArray(schema.sites.clientId, cleanup.clients));
     await db.delete(schema.clients).where(inArray(schema.clients.id, cleanup.clients));
   }
   for (const uid of cleanup.users) {
