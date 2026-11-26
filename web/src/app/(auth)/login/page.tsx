@@ -35,11 +35,8 @@ export default function LoginPage() {
       <main className="auth-left">
         <div className="auth-card">
           <div className="auth-logo">
-            <svg width="48" height="48" viewBox="0 0 28 28" aria-hidden="true">
-              <rect x="1" y="1" width="26" height="26" rx="8" fill="none" stroke="#818CF8" strokeWidth="2"/>
-              <path d="M8 9l6 11 6-11" fill="none" stroke="#E2E8F0" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            <span className="auth-logo-name">Vylax</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/guaitiq-logo-blanco.png" alt="Guaitiq" height={40} style={{ display: 'block' }} />
           </div>
 
           <div className="auth-heading-wrap">

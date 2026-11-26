@@ -20,7 +20,7 @@ export async function generateAndStoreEmailCode(userId: string): Promise<string>
 export async function sendEmailCode(toEmail: string, code: string): Promise<void> {
   await sendEmail({
     to:      toEmail,
-    subject: 'Código de verificación Vylax',
+    subject: 'Código de verificación Guaitiq',
     text:    `Tu código de verificación es: ${code}\n\nCaduca en 10 minutos. No lo compartas con nadie.`,
     html:    `<p>Tu código de verificación es:</p><h2>${code}</h2><p>Caduca en 10 minutos.</p>`,
   });

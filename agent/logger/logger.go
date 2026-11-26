@@ -65,7 +65,7 @@ func (l *Logger) Printf(format string, args ...any) {
 
 // Writer devuelve un io.Writer que escribe en el archivo de log del agente.
 // Úsalo con log.SetOutput para que los mensajes de paquetes externos
-// (gopsutil, wmi, etc.) también aparezcan en vylax-agent.log en modo servicio.
+// (gopsutil, wmi, etc.) también aparezcan en guaitiq-agent.log en modo servicio.
 func (l *Logger) Writer() io.Writer {
 	return &logWriter{l: l}
 }

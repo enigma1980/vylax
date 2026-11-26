@@ -43,8 +43,8 @@ export function decryptTotpSecret(encrypted: string): string {
 // ---------------------------------------------------------------------------
 export function generateTotpSecret(label: string, existingBase32?: string): { base32: string; uri: string } {
   const totp = existingBase32
-    ? new TOTP({ issuer: 'Vylax', label, algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(existingBase32) })
-    : new TOTP({ issuer: 'Vylax', label, algorithm: 'SHA1', digits: 6, period: 30 });
+    ? new TOTP({ issuer: 'Guaitiq', label, algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(existingBase32) })
+    : new TOTP({ issuer: 'Guaitiq', label, algorithm: 'SHA1', digits: 6, period: 30 });
   return { base32: totp.secret.base32, uri: totp.toString() };
 }
 
@@ -54,7 +54,7 @@ export function verifyTotpCode(
   token: string,
   lastStep: number | null,
 ): { valid: false } | { valid: true; step: number } {
-  const totp  = new TOTP({ issuer: 'Vylax', label: '', algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(base32) });
+  const totp  = new TOTP({ issuer: 'Guaitiq', label: '', algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(base32) });
   const delta = totp.validate({ token, window: 1 });
   if (delta === null) return { valid: false };
   const step = Math.floor(Date.now() / 1000 / 30) + delta;

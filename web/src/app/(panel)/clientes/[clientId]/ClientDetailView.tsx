@@ -381,7 +381,7 @@ function AddDeviceButton({ clientId }: { clientId: string }) {
 
   function copyCommand() {
     if (!token) return;
-    navigator.clipboard.writeText(`vylax-agent.exe --token ${token}`).catch(() => {});
+    navigator.clipboard.writeText(`guaitiq-agent.exe --token ${token}`).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -452,7 +452,7 @@ function AddDeviceButton({ clientId }: { clientId: string }) {
                   fontFamily: 'monospace', fontSize: '12px', color: 'var(--accent)',
                   wordBreak: 'break-all', userSelect: 'all',
                 }}>
-                  vylax-agent.exe --token {token}
+                  guaitiq-agent.exe --token {token}
                 </div>
                 <button type="button" onClick={copyCommand}
                   style={{
@@ -951,7 +951,7 @@ function TokensTab({
 
   function copyCommand() {
     if (!fullToken) return;
-    navigator.clipboard.writeText(`vylax-agent.exe --token ${fullToken}`).catch(() => {});
+    navigator.clipboard.writeText(`guaitiq-agent.exe --token ${fullToken}`).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -1148,7 +1148,7 @@ function TokensTab({
               padding: '12px 14px', fontFamily: 'monospace', fontSize: '12px', color: 'var(--accent)',
               wordBreak: 'break-all', userSelect: 'all',
             }}>
-              vylax-agent.exe --token {fullToken}
+              guaitiq-agent.exe --token {fullToken}
             </div>
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
               <button type="button" onClick={copyCommand} style={btnSecondary}>

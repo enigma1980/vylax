@@ -28,13 +28,8 @@ export function OrgSelect({ orgs }: { orgs: Org[] }) {
     <main className="auth-wrap">
       <div className="auth-card">
         <div className="auth-logo">
-          <div className="auth-logo-mark">
-            <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
-              <path d="M9 2L2 6v5c0 3.1 2.9 6 7 7 4.1-1 7-3.9 7-7V6L9 2Z" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round"/>
-              <path d="M6 9l2.5 2.5L12 7" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          <span className="auth-logo-text">Vylax</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/guaitiq-logo-blanco.png" alt="Guaitiq" height={36} style={{ display: 'block' }} />
         </div>
 
         <h1 className="auth-heading">Selecciona una organización</h1>

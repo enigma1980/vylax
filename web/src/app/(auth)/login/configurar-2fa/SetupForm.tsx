@@ -81,11 +81,8 @@ export function SetupForm({ isAdmin }: { isAdmin: boolean }) {
           <div className="auth-card auth-card-wide">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <svg width="32" height="32" viewBox="0 0 28 28" aria-hidden="true">
-                  <rect x="1" y="1" width="26" height="26" rx="8" fill="none" stroke="var(--accent)" strokeWidth="2"/>
-                  <path d="M8 9l6 11 6-11" fill="none" stroke="var(--text)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                <span style={{ fontSize: '18px', fontWeight: 700 }}>Vylax</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/guaitiq-logo-blanco.png" alt="Guaitiq" height={28} style={{ display: 'block' }} />
               </div>
               <span style={{ fontSize: '13px', color: 'var(--text-sec)' }}>Primer inicio de sesión</span>
             </div>

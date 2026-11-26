@@ -1,4 +1,4 @@
-# Vylax
+# Guaitiq
 
 RMM propio para empresas de servicios informáticos.
 
@@ -16,4 +16,4 @@ docs/    Especificación y documentación
 
 ## Documentación
 
-Ver `docs/VYLAX_SPEC.md` para la especificación completa y el contrato de datos.
+Ver `docs/GUAITIQ_SPEC.md` para la especificación completa y el contrato de datos.

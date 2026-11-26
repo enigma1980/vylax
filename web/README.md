@@ -1,4 +1,4 @@
-# Vylax Web
+# Guaitiq Web
 
 Panel web y API – llegará en el paso 3.
 

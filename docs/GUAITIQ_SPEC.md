@@ -1,4 +1,4 @@
-# Vylax – Especificación del proyecto
+# Guaitiq – Especificación del proyecto
 
 Nov 13, 2026 · @Pepe
 
@@ -6,7 +6,7 @@ Nov 13, 2026 · @Pepe
 
 Este documento es la fuente de verdad del proyecto: recoge todo lo analizado y decidido el 13/11/2026, antes de escribir código. Al empezar cualquier sesión nueva (con Claude o con Claude Code), hay que compartirlo y decir en qué paso del plan estamos.
 
-**Estado actual:** diseño y contrato de datos cerrados (16/11/2026): una sola llamada para todos los informes; con credencial revocada el agente reintenta cada 6 h. Pasos 0 a 3 completados (16/11/2026). En curso: paso 4a (comunicación del agente con la API). Hecho: subcomandos enroll/run/dump, carpeta C:\\ProgramData\\Vylax protegida con ACL por SID (solo SYSTEM y Administradores, válido en cualquier idioma), alta con reinstalación probada en tests. Parte 4a terminada el 17/11/2026. Paso 4 terminado el 18/11/2026 (detalle en el plan de trabajo). Siguiente: paso 5, el panel web. Registro histórico: parte 4b (17/11/2026): servicio VylaxAgent instalado y probado (inicio automático retrasado, recuperación tras matar el proceso, parada manual con un solo service\_stopped, desinstalación con aviso sin falsa alerta, reactivación con enroll --force, actualización sin perder el estado active, volúmenes correctos como SYSTEM, tiempos máximos por colector). Pendiente al retomar: (1) comprobar en agent\_events que al apagar el PC llegó un shutdown (puede llegar desde la caché); (2) pasar a Claude Code los ajustes finales: API responde 410 (no 401) a equipos uninstalled, recordar la fecha del último daily para no repetirlo en cada reinicio, no lanzar una recogida pesada si la anterior sigue en curso, añadir logged\_on\_user al evento uninstall. Después: npm run db:reset y paso 5 (panel). Nota: el agente debe ejecutarse como administrador; la terminal de VS Code no lo es. Nota: no borrar web\\.next con el servidor en marcha
+**Estado actual:** diseño y contrato de datos cerrados (16/11/2026): una sola llamada para todos los informes; con credencial revocada el agente reintenta cada 6 h. Pasos 0 a 3 completados (16/11/2026). En curso: paso 4a (comunicación del agente con la API). Hecho: subcomandos enroll/run/dump, carpeta C:\\ProgramData\\Guaitiq protegida con ACL por SID (solo SYSTEM y Administradores, válido en cualquier idioma), alta con reinstalación probada en tests. Parte 4a terminada el 17/11/2026. Paso 4 terminado el 18/11/2026 (detalle en el plan de trabajo). Siguiente: paso 5, el panel web. Registro histórico: parte 4b (17/11/2026): servicio GuaitiqAgent instalado y probado (inicio automático retrasado, recuperación tras matar el proceso, parada manual con un solo service\_stopped, desinstalación con aviso sin falsa alerta, reactivación con enroll --force, actualización sin perder el estado active, volúmenes correctos como SYSTEM, tiempos máximos por colector). Pendiente al retomar: (1) comprobar en agent\_events que al apagar el PC llegó un shutdown (puede llegar desde la caché); (2) pasar a Claude Code los ajustes finales: API responde 410 (no 401) a equipos uninstalled, recordar la fecha del último daily para no repetirlo en cada reinicio, no lanzar una recogida pesada si la anterior sigue en curso, añadir logged\_on\_user al evento uninstall. Después: npm run db:reset y paso 5 (panel). Nota: el agente debe ejecutarse como administrador; la terminal de VS Code no lo es. Nota: no borrar web\\.next con el servidor en marcha
 
 **Reglas de trabajo para Claude / Claude Code:**
 
@@ -71,11 +71,11 @@ Wazuh (ya en uso) no sustituye este proyecto: cubre la seguridad y el inventario
 Cada agente envía sus datos por HTTPS saliente a un único servidor de Global-Link, que los guarda, evalúa las alertas y los muestra en el panel.
 
 ```
-[Vylax Agent en cada equipo]  --HTTPS saliente-->  [Servidor Vylax (VPS, Docker)]
+[Guaitiq Agent en cada equipo]  --HTTPS saliente-->  [Servidor Guaitiq (VPS, Docker)]
  PCs y servidores Windows                            API (registro y recepción)
  Portátiles en oficina o casa                          -> PostgreSQL (métricas y alertas)
                                                            -> Motor de alertas -> Avisos (correo, webhook n8n)
-[Agente colector / Vylax Probe] (V2)  --HTTPS-->           -> Panel web Next.js (global -> cliente -> equipo)
+[Agente colector / Guaitiq Probe] (V2)  --HTTPS-->           -> Panel web Next.js (global -> cliente -> equipo)
    └─ SNMP -> NAS y SAI                                        <- Técnicos (login con 2FA)
 ```
 
@@ -475,15 +475,15 @@ La V1 cubre la mayoría de incidencias evitables con un agente que solo lee y en
 
 **Más adelante:** acceso remoto, ejecución de scripts, agente Linux, RAID por hardware (HPE, Dell).
 
-## Evolución: Vylax Probe (sonda de red)
+## Evolución: Guaitiq Probe (sonda de red)
 
-Vylax incorporará más adelante una sonda de red, inspirada en la propuesta "Sonda de seguretat permanent", dentro del mismo producto: mismo servidor, portal, alertas, semáforo e informe. **Decisión (13/11/2026): primero se hace la V1 del agente**; la sonda viene después.
+Guaitiq incorporará más adelante una sonda de red, inspirada en la propuesta "Sonda de seguretat permanent", dentro del mismo producto: mismo servidor, portal, alertas, semáforo e informe. **Decisión (13/11/2026): primero se hace la V1 del agente**; la sonda viene después.
 
-- **Vylax Agent:** salud de cada equipo Windows, esté donde esté.
-- **Vylax Probe:** mini PC en cada oficina del cliente. Descubre aparatos, lee NAS y SAI por SNMP (sustituye al "agente en modo colector"), revisa TLS, vulnerabilidades, tráfico y wifi.
+- **Guaitiq Agent:** salud de cada equipo Windows, esté donde esté.
+- **Guaitiq Probe:** mini PC en cada oficina del cliente. Descubre aparatos, lee NAS y SAI por SNMP (sustituye al "agente en modo colector"), revisa TLS, vulnerabilidades, tráfico y wifi.
 - **Desarrollo propio** del servicio de la sonda (Go), la gestión de hallazgos y los paneles. **Se reutilizan como motores** nmap, Nuclei, Greenbone, Suricata y Kismet, sin DefectDojo ni Grafana.
-- **Cruces de datos:** PC en la red sin agente Vylax, aparato desconocido, NAS con firmware vulnerable.
-- **Comercial:** Vylax Endpoint (por equipo y mes) y Vylax Network (por sonda y mes).
+- **Cruces de datos:** PC en la red sin agente Guaitiq, aparato desconocido, NAS con firmware vulnerable.
+- **Comercial:** Guaitiq Endpoint (por equipo y mes) y Guaitiq Network (por sonda y mes).
 
 | Fase | Contenido |
 | --- | --- |
@@ -702,10 +702,10 @@ El panel combina la estética y la ficha de equipo de la primera maqueta con la 
 Se avanza un paso cada vez y cada paso se confirma antes del siguiente. Marcar cada uno al terminarlo.
 
 - [x] **Paso 0 – Contrato de datos:** formato JSON de registro, métricas, estado, inventario y eventos del ciclo de vida. Cerrado (v1.1) el 16/11/2026.
-- [x] **Paso 1 – Estructura del proyecto:** repositorio `vylax` (GitHub, privado) en `C:\Users\enigma\proyectos\vylax`, con `agent/`, `web/`, `docs/`, `CLAUDE.md`. Hecho el 16/11/2026.
+- [x] **Paso 1 – Estructura del proyecto:** repositorio `Guaitiq` (GitHub, privado) en `C:\Users\enigma\proyectos\Guaitiq`, con `agent/`, `web/`, `docs/`, `CLAUDE.md`. Hecho el 16/11/2026.
 - [x] **Paso 2 – Agente mínimo:** prototipo que recoge metrics, status, daily e inventory y los vuelca en JSON (`--quick`, `--out`). Validado como administrador el 16/11/2026: 14 MB de RAM, 0,6 % de CPU. Problema conocido: el historial COM de Windows Update devuelve fechas no válidas; se usa Win32\_QuickFixEngineering como alternativa (revisar en el paso 4).
-- [x] **Paso 3 – API:** Next.js 16 + Drizzle + PostgreSQL 17 local (base `vylax`, usuario `vylax`). `/v1/enroll`, `/v1/reports`, `/v1/config` según contrato v1.1. Tokens y credenciales guardados como hash; reenvíos idempotentes (métricas, diarios, inventario solo si cambia el hash, incluido A→B→A). Tests: `npm test` (contrato con el JSON real del agente) y `npm run test:integration` (duplicados). `npm run db:reset` para desarrollo. Validado con el JSON real del agente el 16/11/2026. Pendiente para el paso 5: revisar la contraseña del usuario admin@vylax.local creado por el seed.
-- [ ] **Paso 4 – Agente completo:** 4a (comunicación) HECHA el 17/11/2026: subcomandos enroll/run/dump, alta con reinstalación, carpeta C:\\ProgramData\\Vylax con ACL por SID, calendario de envíos (--fast para pruebas), request\_inventory, caché sin conexión (reenvío de bytes crudos, cache\\invalid para 422) validada cortando el servidor, comprobación de permisos de administrador. 4b (servicio) HECHA el 18/11/2026: servicio VylaxAgent (inicio automático retrasado, recuperación), eventos service\_stopped / shutdown / uninstall (manual y upgrade sin falsa alerta) / suspend / resume (inicio rápido de Windows), 410 para equipos desinstalados, daily no repetido en reinicios (timestamps.json), hash de inventario estable, tiempos máximos por colector y recogida pesada en segundo plano. Pendiente solo comprobar el shutdown en un reinicio real (Reiniciar, no Apagar).
+- [x] **Paso 3 – API:** Next.js 16 + Drizzle + PostgreSQL 17 local (base `Guaitiq`, usuario `Guaitiq`). `/v1/enroll`, `/v1/reports`, `/v1/config` según contrato v1.1. Tokens y credenciales guardados como hash; reenvíos idempotentes (métricas, diarios, inventario solo si cambia el hash, incluido A→B→A). Tests: `npm test` (contrato con el JSON real del agente) y `npm run test:integration` (duplicados). `npm run db:reset` para desarrollo. Validado con el JSON real del agente el 16/11/2026. Pendiente para el paso 5: revisar la contraseña del usuario admin@Guaitiq.local creado por el seed.
+- [ ] **Paso 4 – Agente completo:** 4a (comunicación) HECHA el 17/11/2026: subcomandos enroll/run/dump, alta con reinstalación, carpeta C:\\ProgramData\\Guaitiq con ACL por SID, calendario de envíos (--fast para pruebas), request\_inventory, caché sin conexión (reenvío de bytes crudos, cache\\invalid para 422) validada cortando el servidor, comprobación de permisos de administrador. 4b (servicio) HECHA el 18/11/2026: servicio GuaitiqAgent (inicio automático retrasado, recuperación), eventos service\_stopped / shutdown / uninstall (manual y upgrade sin falsa alerta) / suspend / resume (inicio rápido de Windows), 410 para equipos desinstalados, daily no repetido en reinicios (timestamps.json), hash de inventario estable, tiempos máximos por colector y recogida pesada en segundo plano. Pendiente solo comprobar el shutdown en un reinicio real (Reiniciar, no Apagar).
 - [ ] **Paso 5 – Panel:** login con 2FA, clientes y sedes, vista global → cliente → dispositivo, asignación de pendientes. Mostrar tamaños como Windows (GiB).
 - [ ] **Paso 6 – Alertas:** motor de reglas por tipo, condiciones sostenidas (no alertar por una sola medida), "sin reportar", correo y webhook n8n, puntuación de salud. Servicios parados con exit\_code 0 no alertan.
 - [ ] **Paso 7 – Instalador MSI:** WiX, parámetro TOKEN, aviso de desinstalación, exclusiones ESET.
@@ -720,7 +720,7 @@ Próximo paso: Paso 0, el formato JSON que envía el agente.
 - [ ] Confirmar el stack: agente en Go; panel y API en Next.js (TypeScript) con PostgreSQL.
 - [ ] Alojamiento del servidor: VPS (Hetzner, OVH…) o servidor propio.
 - [ ] Dominio del portal y de la API (independiente de Global-Link, al ser un producto propio).
-- [ ] Nombre del producto: Vylax (decidido el 13/11/2026). Agente: "Vylax Agent", vylax-agent.exe. vylax.com está en venta en un marketplace; se usará otro dominio. Pendiente: buscar la marca en TMview.
+- [ ] Nombre del producto: Guaitiq (decidido el 13/11/2026). Agente: "Guaitiq Agent", Guaitiq-agent.exe. Guaitiq.com está en venta en un marketplace; se usará otro dominio. Pendiente: buscar la marca en TMview.
 - [ ] Puntuación del cliente: media de sus equipos o la del peor equipo.
 - [ ] Cliente para el piloto (con oficina, portátil en remoto y NAS).
 - [ ] Plan de precios definitivo (orientativo: 1 € por equipo y mes) y forma de cobro.

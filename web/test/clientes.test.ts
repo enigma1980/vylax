@@ -153,7 +153,7 @@ describe('POST /api/clientes — creación por admin', { skip }, () => {
     const body = await res.json() as { clientId: string; fullToken: string };
     assert.ok(body.clientId,  'debe devolver clientId');
     assert.ok(body.fullToken, 'debe devolver fullToken');
-    assert.ok(body.fullToken.startsWith('vx_enr_'), 'token debe empezar con vx_enr_');
+    assert.ok(body.fullToken.startsWith('gq_enr_'), 'token debe empezar con gq_enr_');
 
     cleanup.clients.push(body.clientId);
   });

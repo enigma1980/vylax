@@ -1,4 +1,4 @@
-//go:build windows
+﻿//go:build windows
 
 package main
 
@@ -32,10 +32,10 @@ const agentVersion = "0.1.0"
 var procSetPriorityClass = windows.NewLazySystemDLL("kernel32.dll").NewProc("SetPriorityClass")
 
 func main() {
-	// Detectar si se está ejecutando como servicio de Windows antes de procesar argumentos.
+	// Detectar si se estÃ¡ ejecutando como servicio de Windows antes de procesar argumentos.
 	isService, err := winsvc.IsWindowsService()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error al detectar modo de ejecución:", err)
+		fmt.Fprintln(os.Stderr, "error al detectar modo de ejecuciÃ³n:", err)
 		os.Exit(1)
 	}
 	if isService {
@@ -66,13 +66,13 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Fprintln(os.Stderr, "uso: vylax-agent.exe <subcomando>")
+	fmt.Fprintln(os.Stderr, "uso: guaitiq-agent.exe <subcomando>")
 	fmt.Fprintln(os.Stderr, "  run [--fast]                                          Ejecuta el agente en primer plano")
 	fmt.Fprintln(os.Stderr, "  enroll --server <url> --token <token> [--force]       Alta del equipo")
-	fmt.Fprintln(os.Stderr, "  service install|uninstall|start|stop|status           Gestión del servicio de Windows")
-	fmt.Fprintln(os.Stderr, "  notify-uninstall [--reason manual|upgrade]            Notifica una desinstalación")
+	fmt.Fprintln(os.Stderr, "  service install|uninstall|start|stop|status           GestiÃ³n del servicio de Windows")
+	fmt.Fprintln(os.Stderr, "  notify-uninstall [--reason manual|upgrade]            Notifica una desinstalaciÃ³n")
 	fmt.Fprintln(os.Stderr, "                   [--initiated-by <usuario>]")
-	fmt.Fprintln(os.Stderr, "  dump [--quick] [--out <archivo>]                      Vuelca métricas por consola")
+	fmt.Fprintln(os.Stderr, "  dump [--quick] [--out <archivo>]                      Vuelca mÃ©tricas por consola")
 }
 
 // setPriority establece la prioridad del proceso a BELOW_NORMAL.
@@ -89,7 +89,7 @@ func runAsWindowsService() {
 
 	cfg, err := client.LoadConfig()
 	if err != nil {
-		// No está registrado; el SCM verá la salida limpia y reintentará según la política.
+		// No estÃ¡ registrado; el SCM verÃ¡ la salida limpia y reintentarÃ¡ segÃºn la polÃ­tica.
 		return
 	}
 	secret, err := client.LoadCredential()
@@ -102,25 +102,25 @@ func runAsWindowsService() {
 	}
 	defer log.Close()
 
-	// Redirigir el log estándar de Go al archivo del agente para que los avisos
-	// de paquetes externos (gopsutil, wmi, etc.) también aparezcan en modo servicio.
-	// En modo servicio stderr se descarta; sin esta redirección esos mensajes se perderían.
+	// Redirigir el log estÃ¡ndar de Go al archivo del agente para que los avisos
+	// de paquetes externos (gopsutil, wmi, etc.) tambiÃ©n aparezcan en modo servicio.
+	// En modo servicio stderr se descarta; sin esta redirecciÃ³n esos mensajes se perderÃ­an.
 	golog.SetOutput(log.Writer())
 	defer golog.SetOutput(os.Stderr)
 
-	// Si arrancamos tras una actualización, borrar la marca de desinstalación.
+	// Si arrancamos tras una actualizaciÃ³n, borrar la marca de desinstalaciÃ³n.
 	if m := client.ReadUninstallMarker(); m != nil && m.Reason == "upgrade" {
 		client.DeleteUninstallMarker()
-		log.Printf("marcador de actualización eliminado; arrancando tras actualización")
+		log.Printf("marcador de actualizaciÃ³n eliminado; arrancando tras actualizaciÃ³n")
 	}
 
 	hc, err := client.New(cfg.ServerURL, cfg.DeviceID, secret)
 	if err != nil {
-		log.Printf("URL del servidor inválida: %v", err)
+		log.Printf("URL del servidor invÃ¡lida: %v", err)
 		return
 	}
 
-	log.Printf("Vylax Agent %s iniciando como servicio (device=%s)", agentVersion, cfg.DeviceID)
+	log.Printf("Guaitiq Agent %s iniciando como servicio (device=%s)", agentVersion, cfg.DeviceID)
 	if err := service.RunAsService(hc, cfg, log, agentVersion); err != nil {
 		log.Printf("error en svc.Run: %v", err)
 	}
@@ -130,13 +130,13 @@ func runAsWindowsService() {
 
 func cmdRun(args []string) {
 	if !client.IsElevated() {
-		fmt.Fprintln(os.Stderr, "Vylax Agent necesita ejecutarse como administrador.")
+		fmt.Fprintln(os.Stderr, "Guaitiq Agent necesita ejecutarse como administrador.")
 		os.Exit(1)
 	}
 	setPriority()
 
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
-	fast := fs.Bool("fast", false, "intervalos cortos (1 min métricas/status, 5 min daily)")
+	fast := fs.Bool("fast", false, "intervalos cortos (1 min mÃ©tricas/status, 5 min daily)")
 	_ = fs.Parse(args)
 
 	// Comprobar ACL (advertencia, no error fatal)
@@ -147,8 +147,8 @@ func cmdRun(args []string) {
 	cfg, err := client.LoadConfig()
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Fprintln(os.Stderr, "sin credenciales — ejecuta primero:")
-			fmt.Fprintln(os.Stderr, "  vylax-agent.exe enroll --server <url> --token <token>")
+			fmt.Fprintln(os.Stderr, "sin credenciales â€” ejecuta primero:")
+			fmt.Fprintln(os.Stderr, "  guaitiq-agent.exe enroll --server <url> --token <token>")
 		} else {
 			fmt.Fprintln(os.Stderr, "error al leer config.json:", err)
 		}
@@ -158,7 +158,7 @@ func cmdRun(args []string) {
 	secret, err := client.LoadCredential()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error al leer credencial:", err)
-		fmt.Fprintln(os.Stderr, "ejecuta: vylax-agent.exe enroll --server <url> --token <token>")
+		fmt.Fprintln(os.Stderr, "ejecuta: guaitiq-agent.exe enroll --server <url> --token <token>")
 		os.Exit(1)
 	}
 
@@ -169,12 +169,12 @@ func cmdRun(args []string) {
 	}
 	defer log.Close()
 
-	log.Printf("Vylax Agent %s arrancando (device=%s server=%s fast=%v)",
+	log.Printf("Guaitiq Agent %s arrancando (device=%s server=%s fast=%v)",
 		agentVersion, cfg.DeviceID, cfg.ServerURL, *fast)
 
 	hc, err := client.New(cfg.ServerURL, cfg.DeviceID, secret)
 	if err != nil {
-		log.Printf("URL del servidor inválida: %v", err)
+		log.Printf("URL del servidor invÃ¡lida: %v", err)
 		os.Exit(1)
 	}
 
@@ -184,25 +184,25 @@ func cmdRun(args []string) {
 	sched := scheduler.New(hc, cfg, log, agentVersion, *fast)
 	sched.Run(ctx)
 
-	log.Printf("Vylax Agent detenido.")
+	log.Printf("Guaitiq Agent detenido.")
 }
 
 // ---- subcomando: enroll ----
 
 func cmdEnroll(args []string) {
 	if !client.IsElevated() {
-		fmt.Fprintln(os.Stderr, "Vylax Agent necesita ejecutarse como administrador.")
+		fmt.Fprintln(os.Stderr, "Guaitiq Agent necesita ejecutarse como administrador.")
 		os.Exit(1)
 	}
 
 	fs := flag.NewFlagSet("enroll", flag.ExitOnError)
-	server := fs.String("server", "", "URL base del servidor (ej: https://vylax.example.com)")
+	server := fs.String("server", "", "URL base del servidor (ej: https://guaitiq.example.com)")
 	token := fs.String("token", "", "token de alta (proporcionado en el panel)")
 	force := fs.Bool("force", false, "sobrescribir credencial existente")
 	_ = fs.Parse(args)
 
 	if *server == "" || *token == "" {
-		fmt.Fprintln(os.Stderr, "uso: vylax-agent.exe enroll --server <url> --token <token>")
+		fmt.Fprintln(os.Stderr, "uso: guaitiq-agent.exe enroll --server <url> --token <token>")
 		os.Exit(1)
 	}
 
@@ -212,9 +212,9 @@ func cmdEnroll(args []string) {
 	}
 
 	if !*force && client.CredentialExists() {
-		fmt.Fprintln(os.Stderr, "este equipo ya está registrado.")
+		fmt.Fprintln(os.Stderr, "este equipo ya estÃ¡ registrado.")
 		fmt.Fprintln(os.Stderr, "Para volver a darlo de alta usa --force (sobrescribe la credencial actual):")
-		fmt.Fprintln(os.Stderr, "  vylax-agent.exe enroll --server <url> --token <token> --force")
+		fmt.Fprintln(os.Stderr, "  guaitiq-agent.exe enroll --server <url> --token <token> --force")
 		os.Exit(1)
 	}
 
@@ -265,7 +265,7 @@ func cmdEnroll(args []string) {
 	fmt.Printf("  device_id: %s\n", resp.DeviceID)
 	fmt.Printf("  estado:    %s\n", resp.Status)
 	fmt.Printf("  config:    v%d\n", resp.Config.ConfigVersion)
-	fmt.Println("ejecuta 'vylax-agent.exe service install' para instalar el servicio.")
+	fmt.Println("ejecuta 'guaitiq-agent.exe service install' para instalar el servicio.")
 
 	// Enviar evento installed (best-effort)
 	hc, err := client.New(*server, resp.DeviceID, resp.DeviceSecret)
@@ -290,11 +290,11 @@ func cmdEnroll(args []string) {
 
 func cmdService(args []string) {
 	if !client.IsElevated() {
-		fmt.Fprintln(os.Stderr, "Vylax Agent necesita ejecutarse como administrador.")
+		fmt.Fprintln(os.Stderr, "Guaitiq Agent necesita ejecutarse como administrador.")
 		os.Exit(1)
 	}
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "uso: vylax-agent.exe service install|uninstall|start|stop|status")
+		fmt.Fprintln(os.Stderr, "uso: guaitiq-agent.exe service install|uninstall|start|stop|status")
 		os.Exit(1)
 	}
 	switch args[0] {
@@ -309,7 +309,7 @@ func cmdService(args []string) {
 			os.Exit(1)
 		}
 		fmt.Println("servicio instalado correctamente.")
-		fmt.Println("Para iniciarlo: vylax-agent.exe service start")
+		fmt.Println("Para iniciarlo: guaitiq-agent.exe service start")
 	case "uninstall":
 		if err := service.Uninstall(); err != nil {
 			fmt.Fprintln(os.Stderr, "error al desinstalar:", err)
@@ -334,10 +334,10 @@ func cmdService(args []string) {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
-		fmt.Printf("VylaxAgent: %s\n", st)
+		fmt.Printf("GuaitiqAgent: %s\n", st)
 	default:
 		fmt.Fprintf(os.Stderr, "subcomando desconocido: %q\n", args[0])
-		fmt.Fprintln(os.Stderr, "uso: vylax-agent.exe service install|uninstall|start|stop|status")
+		fmt.Fprintln(os.Stderr, "uso: guaitiq-agent.exe service install|uninstall|start|stop|status")
 		os.Exit(1)
 	}
 }
@@ -346,17 +346,17 @@ func cmdService(args []string) {
 
 func cmdNotifyUninstall(args []string) {
 	fs := flag.NewFlagSet("notify-uninstall", flag.ExitOnError)
-	reason := fs.String("reason", "manual", "motivo de la desinstalación (manual|upgrade)")
-	initiatedBy := fs.String("initiated-by", "", "usuario que inicia la desinstalación (lo pasa el MSI)")
+	reason := fs.String("reason", "manual", "motivo de la desinstalaciÃ³n (manual|upgrade)")
+	initiatedBy := fs.String("initiated-by", "", "usuario que inicia la desinstalaciÃ³n (lo pasa el MSI)")
 	_ = fs.Parse(args)
 
 	// Escribir el archivo de marca ANTES de enviar el evento.
-	// Esto indica al servicio (en STOP) que no envíe service_stopped.
+	// Esto indica al servicio (en STOP) que no envÃ­e service_stopped.
 	if err := client.WriteUninstallMarker(*reason); err != nil {
 		fmt.Fprintln(os.Stderr, "advertencia: no se pudo escribir marca:", err)
 	}
 
-	// Si no está registrado, no hay nada que enviar.
+	// Si no estÃ¡ registrado, no hay nada que enviar.
 	cfg, err := client.LoadConfig()
 	if err != nil {
 		os.Exit(0)
@@ -370,13 +370,13 @@ func cmdNotifyUninstall(args []string) {
 		os.Exit(1)
 	}
 
-	// Usuario que inicia la desinstalación.
+	// Usuario que inicia la desinstalaciÃ³n.
 	by := *initiatedBy
 	if by == "" {
 		by = collector.LoggedOnUser()
 	}
 
-	// logged_on_user es siempre la sesión activa vía WTS; initiated_by puede ser
+	// logged_on_user es siempre la sesiÃ³n activa vÃ­a WTS; initiated_by puede ser
 	// distinto si el MSI pasa --initiated-by (p.ej. la cuenta de Intune).
 	loggedOnUser := collector.LoggedOnUser()
 
@@ -401,7 +401,7 @@ func cmdNotifyUninstall(args []string) {
 	for time.Now().Before(deadline) {
 		outcome, _, err := hc.SendReports(env)
 		if outcome.Result == client.SendOK {
-			fmt.Println("evento de desinstalación enviado.")
+			fmt.Println("evento de desinstalaciÃ³n enviado.")
 			return
 		}
 		if outcome.Result == client.SendRetry || err != nil {
@@ -411,9 +411,9 @@ func cmdNotifyUninstall(args []string) {
 		break // 401, 410, etc.: no reintentar
 	}
 
-	// Si no se pudo enviar, guardar en caché para el próximo arranque.
+	// Si no se pudo enviar, guardar en cachÃ© para el prÃ³ximo arranque.
 	_ = client.SaveToCache(env, 10)
-	fmt.Fprintln(os.Stderr, "no se pudo enviar el evento; guardado en caché.")
+	fmt.Fprintln(os.Stderr, "no se pudo enviar el evento; guardado en cachÃ©.")
 }
 
 // ---- subcomando: dump ----
@@ -421,7 +421,7 @@ func cmdNotifyUninstall(args []string) {
 func cmdDump(args []string) {
 	fs := flag.NewFlagSet("dump", flag.ExitOnError)
 	quick := fs.Bool("quick", false, "muestras de CPU de 1 s durante 10 s")
-	outFile := fs.String("out", "", "archivo de salida JSON (vacío = stdout)")
+	outFile := fs.String("out", "", "archivo de salida JSON (vacÃ­o = stdout)")
 	_ = fs.Parse(args)
 
 	sampleInterval := 30 * time.Second
@@ -430,7 +430,7 @@ func cmdDump(args []string) {
 		sampleInterval = 1 * time.Second
 		fmt.Fprintln(os.Stderr, "modo --quick: 10 muestras de 1 s")
 	} else {
-		fmt.Fprintln(os.Stderr, "modo normal: 10 × 30 s (usa --quick para pruebas rápidas)")
+		fmt.Fprintln(os.Stderr, "modo normal: 10 Ã— 30 s (usa --quick para pruebas rÃ¡pidas)")
 	}
 
 	var w io.Writer = os.Stdout
@@ -480,3 +480,4 @@ func detectDeviceType(chassis string) string {
 		return "desktop"
 	}
 }
+

@@ -356,7 +356,7 @@ export const agentEvents = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Hallazgos — reservado para Vylax Probe V3
+// Hallazgos — reservado para Guaitiq Probe V3
 // ---------------------------------------------------------------------------
 export const findings = pgTable(
   'findings',

@@ -22,12 +22,12 @@ const (
 )
 
 const (
-	ServiceName        = "VylaxAgent"
-	ServiceDisplayName = "Vylax Agent"
+	ServiceName        = "GuaitiqAgent"
+	ServiceDisplayName = "Guaitiq Agent"
 	ServiceDescription = "Monitorización remota de equipos Windows"
 )
 
-type vylaxSvc struct {
+type guaitiqSvc struct {
 	hc           *client.Client
 	cfg          *client.LocalConfig
 	log          *logger.Logger
@@ -36,7 +36,7 @@ type vylaxSvc struct {
 	lastResumeAt time.Time            // para deduplicar PBT_APMRESUME* dentro de 60 s
 }
 
-func (s *vylaxSvc) Execute(args []string, r <-chan svc.ChangeRequest, status chan<- svc.Status) (svcSpecificEC bool, exitCode uint32) {
+func (s *guaitiqSvc) Execute(args []string, r <-chan svc.ChangeRequest, status chan<- svc.Status) (svcSpecificEC bool, exitCode uint32) {
 	const accepted = svc.AcceptStop | svc.AcceptShutdown | svc.AcceptPreShutdown | svc.AcceptPowerEvent
 
 	status <- svc.Status{State: svc.StartPending}
@@ -121,7 +121,7 @@ func (s *vylaxSvc) Execute(args []string, r <-chan svc.ChangeRequest, status cha
 
 // RunAsService arranca el bucle del agente como servicio de Windows.
 func RunAsService(hc *client.Client, cfg *client.LocalConfig, log *logger.Logger, ver string) error {
-	return svc.Run(ServiceName, &vylaxSvc{hc: hc, cfg: cfg, log: log, agentVer: ver})
+	return svc.Run(ServiceName, &guaitiqSvc{hc: hc, cfg: cfg, log: log, agentVer: ver})
 }
 
 // sendEventWithTimeout envía un evento con timeout; si falla lo guarda en caché.

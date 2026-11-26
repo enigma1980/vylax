@@ -1,12 +1,12 @@
-# Vylax – Instrucciones para Claude Code
+# Guaitiq – Instrucciones para Claude Code
 
-Vylax es un RMM propio (monitorización proactiva) para empresas de servicios informáticos:
+Guaitiq es un RMM propio (monitorización proactiva) para empresas de servicios informáticos:
 un agente en cada equipo Windows envía métricas por HTTPS a un servidor central, con un portal
 multiempresa (organización → cliente → sede → equipo), alertas e informes.
 
 ## Antes de trabajar
 
-1. Lee **`docs/VYLAX_SPEC.md`**: es la especificación completa y la fuente de verdad.
+1. Lee **`docs/GUAITIQ_SPEC.md`**: es la especificación completa y la fuente de verdad.
    Las decisiones que contiene son firmes; solo se cambian si Pepe lo pide, y entonces se actualiza la especificación.
 2. Mira el apartado **"Plan de trabajo"** de la especificación para saber en qué paso estamos.
 
@@ -17,7 +17,7 @@ multiempresa (organización → cliente → sede → equipo), alertas e informes
 - Al explicar cambios, muestra solo los fragmentos modificados, no archivos completos.
 - No añadas funciones fuera del alcance de la V1 sin preguntar.
 - Desarrollo en Windows (PowerShell). Los comandos que propongas deben funcionar ahí.
-- Tras cada cambio en `agent/`, recompila con: `go build -o vylax-agent.exe .`
+- Tras cada cambio en `agent/`, recompila con: `go build -o guaitiq-agent.exe .`
 
 ## Estructura del repositorio
 
@@ -40,5 +40,5 @@ docs/    Especificación y documentación
 
 ## Estado actual
 
-- Diseño y contrato de datos cerrados (16/11/2026).
-- Siguiente: paso 1 (estructura del repositorio) y paso 2 (prototipo del agente que lee métricas y las muestra por consola en JSON).
+- Renombrado Vylax → Guaitiq completado (26/11/2026).
+- Siguiente: paso 7 (instalador MSI guaitiq-agent.msi) — plan en docs/plan-paso7.md.

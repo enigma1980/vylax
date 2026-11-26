@@ -764,9 +764,9 @@ export default async function EquipoPage({
               )}
             </div>
 
-            {/* Vylax Agent */}
+            {/* Guaitiq Agent */}
             <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-              <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Vylax Agent</h2>
+              <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Guaitiq Agent</h2>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#94A3B8' }}>Versión</span>
                 <span>{device.agentVersion ?? '—'}</span>

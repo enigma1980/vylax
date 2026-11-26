@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-const TimestampsFile = `C:\ProgramData\Vylax\timestamps.json`
+const TimestampsFile = `C:\ProgramData\Guaitiq\timestamps.json`
 
 // Timestamps guarda las fechas de la última recogida de tareas pesadas y el
 // hash del último inventario para no perderlos entre reinicios del servicio.
@@ -20,7 +20,7 @@ type Timestamps struct {
 	InvHash string `json:"inv_hash,omitempty"`
 }
 
-// LoadTimestamps lee C:\ProgramData\Vylax\timestamps.json.
+// LoadTimestamps lee C:\ProgramData\Guaitiq\timestamps.json.
 // Devuelve nil si el archivo no existe o está malformado (primer arranque).
 func LoadTimestamps() (*Timestamps, error) {
 	data, err := os.ReadFile(TimestampsFile)
@@ -37,7 +37,7 @@ func LoadTimestamps() (*Timestamps, error) {
 	return &ts, nil
 }
 
-// SaveTimestamps escribe C:\ProgramData\Vylax\timestamps.json.
+// SaveTimestamps escribe C:\ProgramData\Guaitiq\timestamps.json.
 func SaveTimestamps(ts *Timestamps) error {
 	data, err := json.MarshalIndent(ts, "", "  ")
 	if err != nil {

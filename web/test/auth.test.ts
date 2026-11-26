@@ -191,7 +191,7 @@ describe('TOTP', { skip }, () => {
     assert.ok(totpBase32, 'base32 recibido');
 
     // Generar código válido
-    const totp  = new TOTP({ issuer: 'Vylax', label: '', algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(totpBase32) });
+    const totp  = new TOTP({ issuer: 'Guaitiq', label: '', algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(totpBase32) });
     const code  = totp.generate();
     const resVerify = await post('/api/auth/2fa/totp/verify', { code }, sessionCookie);
     assert.equal(resVerify.status, 200);
@@ -250,7 +250,7 @@ describe('TOTP', { skip }, () => {
     const { base32 } = await resSetup.json() as { base32: string };
 
     // Exactamente el cuerpo que envía SetupForm.tsx: { code }, no { token }
-    const totp = new TOTP({ issuer: 'Vylax', label: '', algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(base32) });
+    const totp = new TOTP({ issuer: 'Guaitiq', label: '', algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(base32) });
     const res  = await post('/api/auth/2fa/totp/verify', { code: totp.generate() }, cookie);
     assert.equal(res.status, 200, 'la ruta acepta { code } como envía SetupForm.tsx');
     const body = await res.json() as { recoveryCodes: string[] };
@@ -535,7 +535,7 @@ describe('Redirecciones y org asignada', { skip }, () => {
     const { decryptTotpSecret } = await import('../src/lib/auth/totp.js');
     const fresh  = await db.query.users.findFirst({ where: eq(schema.users.email, email) });
     const base32 = decryptTotpSecret(fresh!.totpSecretEncrypted!);
-    const totp   = new TOTP({ issuer: 'Vylax', label: '', algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(base32) });
+    const totp   = new TOTP({ issuer: 'Guaitiq', label: '', algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(base32) });
 
     const resVerify = await post('/api/auth/2fa/verify', { code: totp.generate() }, `session_token=${rawCookie}`);
     assert.equal(resVerify.status, 200, '2fa/verify OK');
@@ -558,7 +558,7 @@ describe('Redirecciones y org asignada', { skip }, () => {
     const { decryptTotpSecret } = await import('../src/lib/auth/totp.js');
     const fresh  = await db.query.users.findFirst({ where: eq(schema.users.email, TEST_EMAIL_TOTP) });
     const base32 = decryptTotpSecret(fresh!.totpSecretEncrypted!);
-    const totp   = new TOTP({ issuer: 'Vylax', label: '', algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(base32) });
+    const totp   = new TOTP({ issuer: 'Guaitiq', label: '', algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(base32) });
 
     const resVerify = await post('/api/auth/2fa/verify', { code: totp.generate() }, `session_token=${rawCookie}`);
     assert.equal(resVerify.status, 200);
@@ -582,7 +582,7 @@ describe('Redirecciones y org asignada', { skip }, () => {
     const { decryptTotpSecret } = await import('../src/lib/auth/totp.js');
     const fresh  = await db.query.users.findFirst({ where: eq(schema.users.email, TEST_EMAIL_TOTP) });
     const base32 = decryptTotpSecret(fresh!.totpSecretEncrypted!);
-    const totp   = new TOTP({ issuer: 'Vylax', label: '', algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(base32) });
+    const totp   = new TOTP({ issuer: 'Guaitiq', label: '', algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(base32) });
 
     const resVerify = await post('/api/auth/2fa/verify', { code: totp.generate() }, `session_token=${rawCookie}`);
     assert.equal(resVerify.status, 200, '2fa/verify OK');

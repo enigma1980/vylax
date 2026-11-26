@@ -1,4 +1,4 @@
-//go:build windows
+﻿//go:build windows
 
 package service
 
@@ -30,7 +30,7 @@ type serviceDescription struct {
 	Description *uint16
 }
 
-// Install crea el servicio VylaxAgent con inicio automático retrasado y política de recuperación.
+// Install crea el servicio GuaitiqAgent con inicio automÃ¡tico retrasado y polÃ­tica de recuperaciÃ³n.
 func Install(exePath string) error {
 	m, err := mgr.Connect()
 	if err != nil {
@@ -41,7 +41,7 @@ func Install(exePath string) error {
 	// Comprobar si ya existe.
 	if s, err := m.OpenService(ServiceName); err == nil {
 		s.Close()
-		return fmt.Errorf("el servicio '%s' ya está instalado; desinstálalo primero con: service uninstall", ServiceName)
+		return fmt.Errorf("el servicio '%s' ya estÃ¡ instalado; desinstÃ¡lalo primero con: service uninstall", ServiceName)
 	}
 
 	s, err := m.CreateService(ServiceName, exePath, mgr.Config{
@@ -54,26 +54,26 @@ func Install(exePath string) error {
 	}
 	defer s.Close()
 
-	// Descripción.
+	// DescripciÃ³n.
 	if err := setServiceDescription(s.Handle, ServiceDescription); err != nil {
 		// No fatal.
 		_ = err
 	}
 
-	// Inicio automático retrasado (arranca después de los servicios esenciales).
+	// Inicio automÃ¡tico retrasado (arranca despuÃ©s de los servicios esenciales).
 	if cfg, err := s.Config(); err == nil {
 		cfg.DelayedAutoStart = true
 		_ = s.UpdateConfig(cfg)
 	}
 
-	// Política de recuperación: reiniciar tras 1 min en 1.º, 2.º y sucesivos fallos.
-	// Resetear el contador de fallos al cabo de 1 día.
+	// PolÃ­tica de recuperaciÃ³n: reiniciar tras 1 min en 1.Âº, 2.Âº y sucesivos fallos.
+	// Resetear el contador de fallos al cabo de 1 dÃ­a.
 	if err := s.SetRecoveryActions([]mgr.RecoveryAction{
 		{Type: mgr.ServiceRestart, Delay: 1 * time.Minute},
 		{Type: mgr.ServiceRestart, Delay: 1 * time.Minute},
 		{Type: mgr.ServiceRestart, Delay: 1 * time.Minute},
 	}, 86400); err != nil {
-		// No fatal; el servicio sigue funcionando sin política de recuperación.
+		// No fatal; el servicio sigue funcionando sin polÃ­tica de recuperaciÃ³n.
 		_ = err
 	}
 
@@ -101,7 +101,7 @@ func Uninstall() error {
 
 	st, err := s.Query()
 	if err == nil && st.State != svc.Stopped {
-		return fmt.Errorf("detén el servicio antes de desinstalarlo: vylax-agent.exe service stop")
+		return fmt.Errorf("detÃ©n el servicio antes de desinstalarlo: guaitiq-agent.exe service stop")
 	}
 
 	return s.Delete()
@@ -122,7 +122,7 @@ func Start() error {
 	return s.Start()
 }
 
-// Stop envía la señal de parada al servicio.
+// Stop envÃ­a la seÃ±al de parada al servicio.
 func Stop() error {
 	m, err := mgr.Connect()
 	if err != nil {
@@ -147,7 +147,7 @@ func QueryStatus() (string, error) {
 	defer m.Disconnect()
 	s, err := m.OpenService(ServiceName)
 	if err != nil {
-		return "", fmt.Errorf("servicio no encontrado (¿instalado?): %w", err)
+		return "", fmt.Errorf("servicio no encontrado (Â¿instalado?): %w", err)
 	}
 	defer s.Close()
 	st, err := s.Query()
@@ -164,9 +164,9 @@ func serviceStateString(state svc.State) string {
 	case svc.StartPending:
 		return "iniciando"
 	case svc.StopPending:
-		return "deteniéndose"
+		return "deteniÃ©ndose"
 	case svc.Running:
-		return "en ejecución"
+		return "en ejecuciÃ³n"
 	case svc.ContinuePending:
 		return "reanudando"
 	case svc.PausePending:
@@ -207,3 +207,4 @@ func setServiceDescription(handle windows.Handle, desc string) error {
 	}
 	return nil
 }
+

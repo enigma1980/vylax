@@ -30,12 +30,12 @@ Verificar: `wix --version` → debe mostrar `4.x.y`.
 
 ```
 installer/
-  vylax-agent.wxs      Definición del paquete MSI
+  guaitiq-agent.wxs      Definición del paquete MSI
   build.ps1            Script de build (compila el .exe y genera el .msi)
 web/
   public/
     agent/
-      vylax-agent.msi  MSI resultante, servido estáticamente por Next.js
+      guaitiq-agent.msi  MSI resultante, servido estáticamente por Next.js
 ```
 
 ---
@@ -43,7 +43,7 @@ web/
 ## C. Decisiones (cerradas 26/11/2026)
 
 1. **`SERVER` sin valor por defecto.** El MSI siempre requiere `SERVER` como parámetro. El panel lo añade automáticamente al comando de instalación con su propia URL pública, junto al TOKEN.
-   Comando resultante: `msiexec /i vylax-agent.msi TOKEN=xxx SERVER=https://vylax.empresa.com /qn`
+   Comando resultante: `msiexec /i guaitiq-agent.msi TOKEN=xxx SERVER=https://Guaitiq.empresa.com /qn`
 
 2. **Opción A — MSI único + comando de instalación.** Añadir un botón "Descargar instalador (MSI)" junto a "Copiar comando de instalación" en tres puntos de la UI: pestaña Tokens de alta del cliente, modal "+ Añadir equipo" y página `/pendientes`.
 
@@ -65,9 +65,9 @@ web/
 ### Directorios
 
 ```
-C:\Program Files\Vylax\
-  vylax-agent.exe          → componente principal
-C:\ProgramData\Vylax\      → NO creado por el MSI; lo crea el agente en enroll
+C:\Program Files\Guaitiq\
+  guaitiq-agent.exe          → componente principal
+C:\ProgramData\Guaitiq\      → NO creado por el MSI; lo crea el agente en enroll
                               (así sobrevive a las desinstalaciones y conserva historial)
 ```
 
@@ -76,20 +76,20 @@ C:\ProgramData\Vylax\      → NO creado por el MSI; lo crea el agente en enroll
 El MSI **no** usa los elementos WiX `<ServiceInstall>`/`<ServiceControl>` para el servicio, porque ya tenemos el código Go testeado que configura el inicio retrasado, la recuperación y el preshutdown timeout. En su lugar, usa custom actions que llaman a los subcomandos existentes del agente:
 
 ```
-vylax-agent.exe service install    → crea el servicio con toda la config
-vylax-agent.exe service start      → lo arranca
-vylax-agent.exe service stop       → lo detiene (en desinstalación)
-vylax-agent.exe service uninstall  → lo elimina
+guaitiq-agent.exe service install    → crea el servicio con toda la config
+guaitiq-agent.exe service start      → lo arranca
+guaitiq-agent.exe service stop       → lo detiene (en desinstalación)
+guaitiq-agent.exe service uninstall  → lo elimina
 ```
 
 ### Secuencia de instalación
 
 ```
-1. InstallFiles                  → copia vylax-agent.exe a Program Files\Vylax\
-2. CA_ServiceInstall (deferred)  → vylax-agent.exe service install
-3. CA_Enroll        (deferred)   → vylax-agent.exe enroll --server [SERVER] --token [TOKEN]
+1. InstallFiles                  → copia guaitiq-agent.exe a Program Files\Guaitiq\
+2. CA_ServiceInstall (deferred)  → guaitiq-agent.exe service install
+3. CA_Enroll        (deferred)   → guaitiq-agent.exe enroll --server [SERVER] --token [TOKEN]
                                     (token oculto con HideTarget="yes")
-4. CA_ServiceStart  (deferred)   → vylax-agent.exe service start
+4. CA_ServiceStart  (deferred)   → guaitiq-agent.exe service start
 ```
 
 Si el equipo ya tiene credencial (reinstalación): `enroll` sin `--force` detecta el caso y sale con código de error; el MSI necesita `--force` explícito. Para el flujo normal de reinstalación (misma versión) se pasa `--force` siempre desde la CA — el servidor reconoce el SMBIOS UUID, limpia la credencial revocada y conserva el historial.
@@ -97,11 +97,11 @@ Si el equipo ya tiene credencial (reinstalación): `enroll` sin `--force` detect
 ### Secuencia de desinstalación (desinstalación manual)
 
 ```
-1. CA_NotifyUninstall (deferred) → vylax-agent.exe notify-uninstall --reason manual
-2. CA_ServiceStop     (deferred) → vylax-agent.exe service stop
-3. CA_ServiceUninstall(deferred) → vylax-agent.exe service uninstall
-4. RemoveFiles                   → borra vylax-agent.exe de Program Files\Vylax\
-   C:\ProgramData\Vylax\ NO se borra → el historial y config sobreviven
+1. CA_NotifyUninstall (deferred) → guaitiq-agent.exe notify-uninstall --reason manual
+2. CA_ServiceStop     (deferred) → guaitiq-agent.exe service stop
+3. CA_ServiceUninstall(deferred) → guaitiq-agent.exe service uninstall
+4. RemoveFiles                   → borra guaitiq-agent.exe de Program Files\Guaitiq\
+   C:\ProgramData\Guaitiq\ NO se borra → el historial y config sobreviven
 ```
 
 ### Actualización (versión nueva del MSI)
@@ -109,7 +109,7 @@ Si el equipo ya tiene credencial (reinstalación): `enroll` sin `--force` detect
 WiX usa `<MajorUpgrade>` para detectar que ya hay una versión anterior. La secuencia es:
 
 ```
-1. CA_NotifyUninstall → vylax-agent.exe notify-uninstall --reason upgrade
+1. CA_NotifyUninstall → guaitiq-agent.exe notify-uninstall --reason upgrade
    (el agente escribe un marcador de actualización; al arrancar de nuevo lo elimina)
 2. Desinstalación de la versión antigua (incluye stop + service uninstall)
 3. Instalación de la versión nueva (steps 1–4 de arriba)
@@ -122,13 +122,13 @@ WiX usa `<MajorUpgrade>` para detectar que ya hay una versión anterior. La secu
 
 ```powershell
 # Instalación silenciosa — Intune, PDQ, scripts de despliegue
-msiexec /i vylax-agent.msi TOKEN=<token> /qn
+msiexec /i guaitiq-agent.msi TOKEN=<token> /qn
 
 # Con servidor explícito
-msiexec /i vylax-agent.msi TOKEN=<token> SERVER=https://vylax.empresa.com /qn
+msiexec /i guaitiq-agent.msi TOKEN=<token> SERVER=https://Guaitiq.empresa.com /qn
 
 # Log de instalación (el TOKEN no aparece en el log)
-msiexec /i vylax-agent.msi TOKEN=<token> /qn /l*v C:\Temp\vylax-install.log
+msiexec /i guaitiq-agent.msi TOKEN=<token> /qn /l*v C:\Temp\Guaitiq-install.log
 ```
 
 La propiedad `TOKEN` marcada como `Hidden` no aparece en ningún nivel de log de msiexec.
@@ -140,11 +140,11 @@ La propiedad `TOKEN` marcada como `Hidden` no aparece en ningún nivel de log de
 ### Opción A — MSI único + comando de instalación (recomendada)
 
 El panel muestra:
-1. Un enlace de descarga al MSI estático (`/agent/vylax-agent.msi`).
+1. Un enlace de descarga al MSI estático (`/agent/guaitiq-agent.msi`).
 2. El comando de instalación preconfigurado con el token del cliente (o del token general), listo para copiar.
 
 ```
-msiexec /i vylax-agent.msi TOKEN=vylx_abc123def456 /qn
+msiexec /i guaitiq-agent.msi TOKEN=vylx_abc123def456 /qn
 ```
 
 **Pros:**
@@ -185,17 +185,17 @@ Generar un MSI diferente por cada token es costoso en tiempo de build y almacena
 # 1. Compilar el agente (Windows AMD64, sin consola de debug)
 Set-Location "$PSScriptRoot\..\agent"
 $env:GOOS = "windows"; $env:GOARCH = "amd64"
-go build -o "..\installer\bin\vylax-agent.exe" .
+go build -o "..\installer\bin\guaitiq-agent.exe" .
 
 # 2. Generar el MSI
 Set-Location "$PSScriptRoot"
-wix build vylax-agent.wxs `
+wix build guaitiq-agent.wxs `
     -arch x64 `
-    -out bin\vylax-agent.msi
+    -out bin\guaitiq-agent.msi
 
 # 3. Copiar al panel
-Copy-Item bin\vylax-agent.msi ..\web\public\agent\vylax-agent.msi -Force
-Write-Host "✅  vylax-agent.msi generado y copiado a web/public/agent/"
+Copy-Item bin\guaitiq-agent.msi ..\web\public\agent\guaitiq-agent.msi -Force
+Write-Host "✅  guaitiq-agent.msi generado y copiado a web/public/agent/"
 ```
 
 Ejecutar desde PowerShell (admin no necesario para el build; sí para las pruebas de instalación):
@@ -226,9 +226,9 @@ Para evitar que ESET bloquee la instalación o el agente en los equipos gestiona
 
 | Tipo | Valor |
 |---|---|
-| Ruta | `C:\Program Files\Vylax\*` |
-| Ruta | `C:\ProgramData\Vylax\*` |
-| Archivo ejecutable | `vylax-agent.exe` |
+| Ruta | `C:\Program Files\Guaitiq\*` |
+| Ruta | `C:\ProgramData\Guaitiq\*` |
+| Archivo ejecutable | `guaitiq-agent.exe` |
 
 En la máquina de pruebas local (ESET instalado), añadir la misma exclusión en ESET Security → Configuración → Exclusiones antes de instalar.
 
@@ -240,7 +240,7 @@ En la máquina de pruebas local (ESET instalado), añadir la misma exclusión en
 
 El servidor corre en el sobremesa (`192.168.1.51:3000`). El agente acepta HTTP en desarrollo; basta con:
 ```
-msiexec /i vylax-agent.msi TOKEN=<token_org> SERVER=http://192.168.1.51:3000 /qn
+msiexec /i guaitiq-agent.msi TOKEN=<token_org> SERVER=http://192.168.1.51:3000 /qn
 ```
 
 Pasos:
@@ -256,16 +256,16 @@ La base de datos se reinició en el paso 5a y la credencial del agente ya no es 
 
 ```powershell
 # 1. Detener el servicio actual (si está corriendo)
-.\vylax-agent.exe service stop
+.\guaitiq-agent.exe service stop
 
 # 2. Re-enroll con --force (sobrescribe la credencial sin borrar el historial)
-.\vylax-agent.exe enroll --server http://localhost:3000 --token <token_de_la_nueva_bd> --force
+.\guaitiq-agent.exe enroll --server http://localhost:3000 --token <token_de_la_nueva_bd> --force
 
 # 3. Arrancar el servicio
-.\vylax-agent.exe service start
+.\guaitiq-agent.exe service start
 ```
 
-Alternativamente, desinstalar con el MSI y reinstalar: el flujo de reinstalación usa `--force` automáticamente y `C:\ProgramData\Vylax\` se conserva (el SMBIOS UUID coincide → el servidor une el nuevo enrollment con el historial existente si se implementa reenroll en el paso 5b).
+Alternativamente, desinstalar con el MSI y reinstalar: el flujo de reinstalación usa `--force` automáticamente y `C:\ProgramData\Guaitiq\` se conserva (el SMBIOS UUID coincide → el servidor une el nuevo enrollment con el historial existente si se implementa reenroll en el paso 5b).
 
 ---
 
@@ -274,7 +274,7 @@ Alternativamente, desinstalar con el MSI y reinstalar: el flujo de reinstalació
 | Parte | Contenido | Notas |
 |---|---|---|
 | **1** | Entorno: instalar .NET 8 SDK + WiX v4. Crear `installer/`. Compilar el agente en modo release. | Manual (tú en el sobremesa) |
-| **2** | `vylax-agent.wxs`: estructura base, directorios, componente del .exe, propiedades TOKEN/SERVER. Sin custom actions todavía. Build del MSI vacío como smoke test. | — |
+| **2** | `guaitiq-agent.wxs`: estructura base, directorios, componente del .exe, propiedades TOKEN/SERVER. Sin custom actions todavía. Build del MSI vacío como smoke test. | — |
 | **3** | Custom actions: `service install`, `enroll` (token oculto), `service start`. Prueba de instalación silenciosa en máquina virtual o segundo PC. | — |
 | **4** | Desinstalación limpia: `notify-uninstall --reason manual`, service stop/uninstall. `MajorUpgrade` para actualizaciones con `--reason upgrade`. | — |
 | **5** | Panel: botón "Descargar agente" en la ficha del cliente (pestaña Tokens) y en `/pendientes` (token general). Enlace al MSI + comando de instalación preconfigurado con el token activo. | Decisión F pendiente |

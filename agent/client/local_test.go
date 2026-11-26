@@ -8,11 +8,11 @@ import (
 )
 
 // TestEnsureDirIdempotente verifica que ensureDir no falla al llamarse dos veces
-// sobre la misma carpeta (caso de re-enroll con C:\ProgramData\Vylax ya existente).
+// sobre la misma carpeta (caso de re-enroll con C:\ProgramData\Guaitiq ya existente).
 func TestEnsureDirIdempotente(t *testing.T) {
 	tmp := t.TempDir()
-	dataDir := filepath.Join(tmp, "Vylax")
-	cacheDir := filepath.Join(tmp, "Vylax", "cache")
+	dataDir := filepath.Join(tmp, "Guaitiq")
+	cacheDir := filepath.Join(tmp, "Guaitiq", "cache")
 
 	dirs := []string{dataDir, cacheDir}
 

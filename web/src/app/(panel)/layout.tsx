@@ -27,11 +27,8 @@ export default async function PanelLayout({ children }: { children: React.ReactN
       <div className="panel-wrap">
         <header className="panel-header">
           <a href="/" className="panel-header-logo" aria-label="Inicio">
-            <svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true">
-              <rect x="1" y="1" width="26" height="26" rx="8" fill="none" stroke="var(--accent)" strokeWidth="2"/>
-              <path d="M8 9l6 11 6-11" fill="none" stroke="var(--text)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            <span>Vylax</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/guaitiq-logo-blanco.png" alt="Guaitiq" height={28} style={{ display: 'block' }} />
           </a>
 
           <HeaderBreadcrumb orgName={org?.name ?? '…'} />

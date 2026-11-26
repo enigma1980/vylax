@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const UninstallMarkerFile = `C:\ProgramData\Vylax\uninstalling`
+const UninstallMarkerFile = `C:\ProgramData\Guaitiq\uninstalling`
 
 // UninstallMarker es el contenido del archivo de marca que escribe notify-uninstall.
 type UninstallMarker struct {

@@ -29,7 +29,7 @@ export async function sendEmail(opts: MailOptions): Promise<void> {
   });
 
   await transport.sendMail({
-    from: process.env.SMTP_FROM ?? 'Vylax <noreply@vylax.com>',
+    from: process.env.SMTP_FROM ?? 'Guaitiq <noreply@guaitiq.com>',
     to:   opts.to,
     subject: opts.subject,
     text:    opts.text,

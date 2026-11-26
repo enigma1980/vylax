@@ -15,12 +15,12 @@ import (
 
 // Rutas del directorio de datos del agente.
 const (
-	DataDir         = `C:\ProgramData\Vylax`
-	ConfigFile      = `C:\ProgramData\Vylax\config.json`
-	CredFile        = `C:\ProgramData\Vylax\credential.bin`
-	CacheDir        = `C:\ProgramData\Vylax\cache`
-	InvalidCacheDir = `C:\ProgramData\Vylax\cache\invalid`
-	LogFile         = `C:\ProgramData\Vylax\vylax-agent.log`
+	DataDir         = `C:\ProgramData\Guaitiq`
+	ConfigFile      = `C:\ProgramData\Guaitiq\config.json`
+	CredFile        = `C:\ProgramData\Guaitiq\credential.bin`
+	CacheDir        = `C:\ProgramData\Guaitiq\cache`
+	InvalidCacheDir = `C:\ProgramData\Guaitiq\cache\invalid`
+	LogFile         = `C:\ProgramData\Guaitiq\guaitiq-agent.log`
 )
 
 // LocalConfig almacena la configuración local persistente del agente.
@@ -75,7 +75,7 @@ func IsElevated() bool {
 
 // --- Gestión del directorio de datos ---
 
-// SetupDataDir crea C:\ProgramData\Vylax con ACL restrictiva:
+// SetupDataDir crea C:\ProgramData\Guaitiq con ACL restrictiva:
 // solo SYSTEM y BA (Administradores) tienen acceso, sin herencia.
 // Usa SDDL con SIDs en lugar de nombres de cuenta, por lo que funciona
 // en cualquier idioma de Windows.
@@ -271,7 +271,7 @@ func dpApiDecrypt(ciphertext []byte) ([]byte, error) {
 
 // --- config.json ---
 
-// LoadConfig lee C:\ProgramData\Vylax\config.json.
+// LoadConfig lee C:\ProgramData\Guaitiq\config.json.
 func LoadConfig() (*LocalConfig, error) {
 	data, err := os.ReadFile(ConfigFile)
 	if err != nil {
@@ -284,7 +284,7 @@ func LoadConfig() (*LocalConfig, error) {
 	return &cfg, nil
 }
 
-// SaveConfig escribe C:\ProgramData\Vylax\config.json.
+// SaveConfig escribe C:\ProgramData\Guaitiq\config.json.
 func SaveConfig(cfg *LocalConfig) error {
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {

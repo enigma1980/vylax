@@ -4,19 +4,19 @@ export function sha256hex(input: string): string {
   return createHash('sha256').update(input, 'utf8').digest('hex');
 }
 
-/** Genera un token de alta: vx_enr_ + 24 bytes base64url */
+/** Genera un token de alta: gq_enr_ + 24 bytes base64url */
 export function generateEnrollmentToken(): string {
-  return 'vx_enr_' + randomBytes(24).toString('base64url');
+  return 'gq_enr_' + randomBytes(24).toString('base64url');
 }
 
-/** Genera una credencial de dispositivo: vx_sec_ + 32 bytes base64url */
+/** Genera una credencial de dispositivo: gq_sec_ + 32 bytes base64url */
 export function generateDeviceSecret(): string {
-  return 'vx_sec_' + randomBytes(32).toString('base64url');
+  return 'gq_sec_' + randomBytes(32).toString('base64url');
 }
 
-/** Extrae los 8 primeros caracteres del token (después del prefijo) */
+/** Extrae los 8 primeros caracteres del token (después del prefijo de 7 chars) */
 export function tokenPrefix(token: string): string {
-  // token = "vx_enr_<base64url>" → prefijo = chars 7..15
+  // token = "gq_enr_<base64url>" (o legado "vx_enr_<base64url>") → prefijo = chars 7..15
   return token.slice(7, 15);
 }
 

@@ -122,7 +122,7 @@ export function PendientesView({ pendingDevices, orgToken, clientsWithSites, isA
 
   function copyInstallCmd() {
     if (!fullToken) return;
-    const cmd = `msiexec /i vylax-agent.msi TOKEN=${fullToken} /qn`;
+    const cmd = `msiexec /i guaitiq-agent.msi TOKEN=${fullToken} /qn`;
     navigator.clipboard.writeText(cmd).then(() => {
       setTokenCopied(true);
       setTimeout(() => setTokenCopied(false), 3000);
@@ -188,7 +188,7 @@ export function PendientesView({ pendingDevices, orgToken, clientsWithSites, isA
                 <div style={{ background: '#0A0F1E', border: '1px solid var(--border)', borderRadius: '6px', padding: '10px 12px' }}>
                   <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#94A3B8' }}>Comando de instalación (cópialo ahora — no se guardará):</p>
                   <code style={{ fontSize: '12px', fontFamily: 'monospace', wordBreak: 'break-all', color: '#E2E8F0' }}>
-                    msiexec /i vylax-agent.msi TOKEN={fullToken} /qn
+                    msiexec /i guaitiq-agent.msi TOKEN={fullToken} /qn
                   </code>
                 </div>
               )}
