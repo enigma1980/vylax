@@ -70,11 +70,12 @@ export function PendientesView({ pendingDevices, orgToken, clientsWithSites, isA
   const router = useRouter();
 
   // Token
-  const [token,          setToken]          = useState<TokenRow | null>(orgToken);
-  const [fullToken,      setFullToken]       = useState<string | null>(null);
-  const [tokenLoading,   setTokenLoading]    = useState(false);
-  const [tokenError,     setTokenError]      = useState('');
-  const [tokenCopied,    setTokenCopied]     = useState(false);
+  const [token,              setToken]          = useState<TokenRow | null>(orgToken);
+  const [fullToken,          setFullToken]       = useState<string | null>(null);
+  const [tokenLoading,       setTokenLoading]    = useState(false);
+  const [tokenError,         setTokenError]      = useState('');
+  const [tokenCopied,        setTokenCopied]     = useState(false);
+  const [showRegenConfirm,   setShowRegenConfirm] = useState(false);
 
   // Modal de asignación
   const [assignDeviceId, setAssignDeviceId] = useState<string | null>(null);
@@ -171,12 +172,12 @@ export function PendientesView({ pendingDevices, orgToken, clientsWithSites, isA
                   </button>
                 ) : (
                   <span style={{ fontSize: '12px', color: 'var(--text-sec)', fontStyle: 'italic' }}>
-                    Token ya creado — rota para obtener uno nuevo
+                    Token ya creado — regenera para obtener uno nuevo
                   </span>
                 )}
 
-                <button style={btnBase} onClick={handleRotateToken} disabled={tokenLoading}>
-                  {tokenLoading ? '…' : 'Rotar'}
+                <button style={btnBase} onClick={() => { setTokenError(''); setShowRegenConfirm(true); }} disabled={tokenLoading}>
+                  Regenerar
                 </button>
                 <button style={btnDanger} onClick={handleRevokeToken} disabled={tokenLoading}>
                   {tokenLoading ? '…' : 'Revocar'}
@@ -246,6 +247,32 @@ export function PendientesView({ pendingDevices, orgToken, clientsWithSites, isA
           </tbody>
         </table>
       </div>
+
+      {/* Modal confirmar regenerar token */}
+      {showRegenConfirm && (
+        <div style={overlayStyle} onClick={() => setShowRegenConfirm(false)}>
+          <div style={modalBox} onClick={e => e.stopPropagation()}>
+            <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>Regenerar token general</h2>
+            <p style={{ margin: 0, fontSize: '13px', color: '#94A3B8', lineHeight: '1.6' }}>
+              Se creará un token nuevo y el actual dejará de funcionar para instalar equipos nuevos.
+              Los equipos ya instalados no se ven afectados.
+            </p>
+            {tokenError && <p style={errorStyle}>{tokenError}</p>}
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button style={btnBase} onClick={() => setShowRegenConfirm(false)} disabled={tokenLoading}>
+                Cancelar
+              </button>
+              <button style={btnPrimary} disabled={tokenLoading}
+                onClick={async () => {
+                  await handleRotateToken();
+                  setShowRegenConfirm(false);
+                }}>
+                {tokenLoading ? 'Regenerando…' : 'Regenerar token'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de asignación */}
       {assignDeviceId && (

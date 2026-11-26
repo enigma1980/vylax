@@ -1073,7 +1073,7 @@ function TokensTab({
                     <span style={{ display: 'flex', gap: '6px' }}>
                       {!t.revokedAt && (
                         <>
-                          <button type="button" onClick={() => openRotate(t)} style={btnSmall(btnSecondary)}>Rotar</button>
+                          <button type="button" onClick={() => openRotate(t)} style={btnSmall(btnSecondary)}>Regenerar</button>
                           <button type="button" onClick={() => openRevoke(t)} style={btnSmall(btnDanger)}>Revocar</button>
                         </>
                       )}
@@ -1138,7 +1138,7 @@ function TokensTab({
           <div style={{ background: '#16171A', border: '1px solid var(--border)', borderRadius: '14px',
             padding: '28px', width: '100%', maxWidth: '520px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>
-              {modal === 'rotate_show' ? 'Token rotado' : 'Token de alta generado'}
+              {modal === 'rotate_show' ? 'Token regenerado' : 'Token de alta generado'}
             </h2>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-sec)' }}>
               Copia el comando ahora. Este token <strong style={{ color: 'var(--text)' }}>no se puede recuperar</strong> una vez cerrado este diálogo.
@@ -1185,25 +1185,25 @@ function TokensTab({
         </div>
       )}
 
-      {/* Modal confirmar rotar */}
+      {/* Modal confirmar regenerar */}
       {modal === 'rotate_confirm' && current && (
-        <div role="dialog" aria-modal="true" aria-label="Confirmar rotación"
+        <div role="dialog" aria-modal="true" aria-label="Confirmar regeneración"
           style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.6)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
           onClick={e => { if (e.target === e.currentTarget) close(); }}>
           <div style={{ background: '#16171A', border: '1px solid var(--border)', borderRadius: '14px',
-            padding: '28px', width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>Rotar token</h2>
-            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-sec)' }}>
-              El token actual «{current.label}» quedará revocado al instante y se creará uno nuevo.
-              Los equipos ya registrados no se verán afectados.
+            padding: '28px', width: '100%', maxWidth: '440px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>Regenerar token</h2>
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-sec)', lineHeight: '1.6' }}>
+              Se creará un token nuevo y el actual dejará de funcionar para instalar equipos nuevos.
+              Los equipos ya instalados no se ven afectados.
             </p>
             {err && <p style={{ margin: 0, fontSize: '13px', color: 'var(--red)' }}>{err}</p>}
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
               <button type="button" onClick={close} style={btnSecondary}>Cancelar</button>
               <button type="button" onClick={confirmRotate} disabled={loading}
                 style={{ ...btnPrimary, opacity: loading ? 0.7 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
-                {loading ? 'Rotando…' : 'Rotar token'}
+                {loading ? 'Regenerando…' : 'Regenerar token'}
               </button>
             </div>
           </div>
