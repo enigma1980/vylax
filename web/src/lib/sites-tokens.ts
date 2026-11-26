@@ -333,6 +333,116 @@ export async function deleteClient(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Token de org (bandeja de entrada) — clientId = null
+// ---------------------------------------------------------------------------
+
+export async function getOrgToken(orgId: string): Promise<TokenRow | null> {
+  const rows = await db.execute<{
+    id: string; label: string; token_prefix: string;
+    revoked_at: string | null; created_at: string;
+  }>(sql`
+    SELECT id, label, token_prefix, revoked_at, created_at
+    FROM enrollment_tokens
+    WHERE organization_id = ${orgId}
+      AND client_id IS NULL
+      AND revoked_at IS NULL
+    ORDER BY created_at DESC
+    LIMIT 1
+  `);
+  if (!rows[0]) return null;
+  const r = rows[0];
+  return {
+    id:          r.id,
+    label:       r.label,
+    tokenPrefix: r.token_prefix,
+    siteId:      null,
+    siteName:    null,
+    revokedAt:   null,
+    createdAt:   r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+    lastUsedAt:  null,
+  };
+}
+
+export async function createOrgToken(
+  orgId: string,
+  userId: string,
+  label: string,
+): Promise<{ token: TokenRow; fullToken: string }> {
+  const fullToken = generateEnrollmentToken();
+  const hash      = sha256hex(fullToken);
+  const prefix    = makePrefix(fullToken);
+
+  const [t] = await db.transaction(async tx => {
+    const [rec] = await tx.insert(enrollmentTokens).values({
+      organizationId: orgId,
+      clientId:    null,
+      siteId:      null,
+      tokenHash:   hash,
+      tokenPrefix: prefix,
+      label,
+    }).returning();
+    await tx.insert(auditLog).values({
+      userId, orgId, event: 'token_created',
+      metadata: { tokenId: rec.id, clientId: null, prefix, type: 'org' },
+    });
+    return [rec];
+  });
+
+  return {
+    token: {
+      id: t.id, label: t.label, tokenPrefix: t.tokenPrefix,
+      siteId: null, siteName: null, revokedAt: null,
+      createdAt: t.createdAt!.toISOString(), lastUsedAt: null,
+    },
+    fullToken,
+  };
+}
+
+export async function rotateOrgToken(
+  orgId: string,
+  userId: string,
+  tokenId: string,
+): Promise<{ token: TokenRow; fullToken: string }> {
+  const old = await db.query.enrollmentTokens.findFirst({
+    where: and(eq(enrollmentTokens.id, tokenId), eq(enrollmentTokens.organizationId, orgId)),
+  });
+  if (!old) notFound('Token no encontrado');
+  if (old!.clientId) conflict('Solo se pueden rotar tokens de org desde esta ruta');
+
+  const fullToken = generateEnrollmentToken();
+  const hash      = sha256hex(fullToken);
+  const prefix    = makePrefix(fullToken);
+
+  const [t] = await db.transaction(async tx => {
+    await tx.update(enrollmentTokens)
+      .set({ revokedAt: new Date() })
+      .where(eq(enrollmentTokens.id, tokenId));
+    const [rec] = await tx.insert(enrollmentTokens).values({
+      organizationId: orgId,
+      clientId:    null,
+      siteId:      null,
+      tokenHash:   hash,
+      tokenPrefix: prefix,
+      label:       old!.label,
+    }).returning();
+    await tx.insert(auditLog).values([
+      { userId, orgId, event: 'token_revoked', metadata: { tokenId, clientId: null, reason: 'rotate' } },
+      { userId, orgId, event: 'token_created', metadata: { tokenId: rec.id, clientId: null, prefix, rotatedFrom: tokenId, type: 'org' } },
+    ]);
+    return [rec];
+  });
+
+  return {
+    token: {
+      id: t.id, label: t.label, tokenPrefix: t.tokenPrefix,
+      siteId: null, siteName: null, revokedAt: null,
+      createdAt: t.createdAt!.toISOString(), lastUsedAt: null,
+    },
+    fullToken,
+  };
+}
+
 export async function rotateToken(
   orgId: string,
   userId: string,

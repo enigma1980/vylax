@@ -27,7 +27,8 @@
     "test:sites-tokens": "dotenv -e .env.local -- tsx --test test/sites-tokens.test.ts",
     "test:ajustes-cliente": "dotenv -e .env.local -- tsx --test test/ajustes-cliente.test.ts",
     "test:device-detail": "dotenv -e .env.local -- tsx --test test/device-detail.test.ts",
-    "test:device-actions": "dotenv -e .env.local -- tsx --test test/device-actions.test.ts"
+    "test:device-actions": "dotenv -e .env.local -- tsx --test test/device-actions.test.ts",
+    "test:pendientes": "dotenv -e .env.local -- tsx --test test/pendientes.test.ts"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.2",

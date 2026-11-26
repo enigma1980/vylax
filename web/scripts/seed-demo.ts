@@ -55,6 +55,16 @@ async function main() {
   }
   console.log('✔  Org:', org.name, org.id);
 
+  // ── Limpiar equipos pendientes de demo anteriores ─────────────────────────
+  const DEMO_PENDING = ['PC-NUEVO-RECEPCION', 'SRV-NUEVO-SERVIDOR'];
+  const existingPending = await db.select({ id: schema.devices.id })
+    .from(schema.devices)
+    .where(and(eq(schema.devices.organizationId, org.id), inArray(schema.devices.hostname, DEMO_PENDING)));
+  if (existingPending.length > 0) {
+    await db.delete(schema.deviceCurrentState).where(inArray(schema.deviceCurrentState.deviceId, existingPending.map(d => d.id)));
+    await db.delete(schema.devices).where(inArray(schema.devices.id, existingPending.map(d => d.id)));
+  }
+
   // ── Limpiar datos de demo anteriores ───────────────────────────────────────
   const existing = await db
     .select({ id: schema.clients.id })
@@ -412,9 +422,46 @@ async function main() {
     }
   }
 
+  // ── Equipos pendientes de asignar ─────────────────────────────────────────
+  const { createHash } = await import('node:crypto');
+  function fakeHash(s: string) { return createHash('sha256').update(s).digest('hex'); }
+
+  const pendingDevs = await db.insert(schema.devices).values([
+    {
+      organizationId: org.id,
+      hostname: 'PC-NUEVO-RECEPCION',
+      credentialHash: fakeHash(`demo-pending-1-${Date.now()}`),
+      status: 'pending_assignment',
+      publicIp: '82.98.12.44',
+      deviceTypeHint: 'desktop',
+      lastSeenAt: minsAgo(3),
+    },
+    {
+      organizationId: org.id,
+      hostname: 'SRV-NUEVO-SERVIDOR',
+      credentialHash: fakeHash(`demo-pending-2-${Date.now()}`),
+      status: 'pending_assignment',
+      publicIp: '82.98.12.45',
+      deviceTypeHint: 'server',
+      lastSeenAt: minsAgo(45),
+    },
+  ]).returning();
+
+  for (const dev of pendingDevs) {
+    await db.insert(schema.deviceCurrentState).values({
+      deviceId: dev.id, organizationId: org.id,
+      osInfo: dev.deviceTypeHint === 'server'
+        ? osInfoState('Windows Server 2022', '20348.2762', 'Dell Inc.')
+        : osInfoState('Windows 11 Pro', '22631.4602'),
+      network: networkState(dev.publicIp!, 1000),
+      updatedAt: new Date(),
+    });
+  }
+
   console.log(`✔  Clínica Serra:     ${serraDevs.length} dispositivos (SRV-CLINICA: AV+discos críticos; SRV-NORTE: actualizaciones 48d)`);
   console.log(`✔  Despacho Martí:    ${martiDevs.length} dispositivos (PC-RECEP: 93 % disco, AV desactualizado)`);
   console.log(`✔  Transportes Vall:  ${vallDevs.length} dispositivos (laptops apagadas normalmente, estado ok)`);
+  console.log(`✔  Pendientes:        ${pendingDevs.length} equipos nuevos sin asignar`);
   console.log('\n✅  Datos de demo creados. Ejecuta npm run dev para ver el panel.');
 
   await sql.end();

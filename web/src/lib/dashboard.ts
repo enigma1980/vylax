@@ -850,6 +850,52 @@ export async function getDevicesForOrg(orgId: string): Promise<DeviceOrgRow[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Equipos pendientes de asignar
+// ---------------------------------------------------------------------------
+
+export interface PendingDeviceRow {
+  id:         string;
+  hostname:   string;
+  publicIp:   string | null;
+  osName:     string | null;
+  lastSeenAt: string | null;
+  createdAt:  string;
+}
+
+export async function getPendingDevices(orgId: string): Promise<PendingDeviceRow[]> {
+  const rows = await db
+    .select({
+      id:        devices.id,
+      hostname:  devices.hostname,
+      publicIp:  devices.publicIp,
+      createdAt: devices.createdAt,
+      lastSeenAt: devices.lastSeenAt,
+      osInfo:    deviceCurrentState.osInfo,
+    })
+    .from(devices)
+    .leftJoin(deviceCurrentState, eq(devices.id, deviceCurrentState.deviceId))
+    .where(
+      and(
+        eq(devices.organizationId, orgId),
+        eq(devices.status, 'pending_assignment'),
+      ),
+    )
+    .orderBy(devices.createdAt);
+
+  return rows.map(row => {
+    const osInfo = row.osInfo as { name?: string } | null;
+    return {
+      id:        row.id,
+      hostname:  row.hostname,
+      publicIp:  row.publicIp ?? null,
+      osName:    osInfo?.name ?? null,
+      lastSeenAt: row.lastSeenAt?.toISOString() ?? null,
+      createdAt:  row.createdAt!.toISOString(),
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Clientes con sedes — para el modal "Mover equipo"
 // ---------------------------------------------------------------------------
 
