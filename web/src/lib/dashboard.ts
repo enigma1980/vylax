@@ -588,7 +588,9 @@ export async function getDevice(orgId: string, deviceId: string): Promise<Device
 export interface MetricPoint {
   ts:               string;
   cpuAvgPct:        number | null;
+  cpuMaxPct:        number | null;
   memoryUsedAvgPct: number | null;
+  memoryUsedMaxPct: number | null;
 }
 
 export async function getDeviceMetrics(
@@ -599,11 +601,13 @@ export async function getDeviceMetrics(
   const trunc    = period === '24h' ? 'hour' : 'day';
   const interval = period === '24h' ? '24 hours' : '7 days';
 
-  const rows = await db.execute<{ ts: string; cpu: string | null; mem: string | null }>(sql`
+  const rows = await db.execute<{ ts: string; cpu: string | null; cpu_max: string | null; mem: string | null; mem_max: string | null }>(sql`
     SELECT
       date_trunc(${trunc}, period_start)::text AS ts,
       AVG(cpu_avg_pct)::text                   AS cpu,
-      AVG(memory_used_avg_pct)::text           AS mem
+      MAX(cpu_max_pct)::text                   AS cpu_max,
+      AVG(memory_used_avg_pct)::text           AS mem,
+      MAX(memory_used_max_pct)::text           AS mem_max
     FROM metrics_5min
     WHERE device_id        = ${deviceId}
       AND organization_id  = ${orgId}
@@ -612,10 +616,12 @@ export async function getDeviceMetrics(
     ORDER BY 1
   `);
 
-  return (rows as Array<{ ts: string; cpu: string | null; mem: string | null }>).map(r => ({
+  return (rows as Array<{ ts: string; cpu: string | null; cpu_max: string | null; mem: string | null; mem_max: string | null }>).map(r => ({
     ts:               r.ts,
-    cpuAvgPct:        r.cpu != null ? parseFloat(r.cpu) : null,
-    memoryUsedAvgPct: r.mem != null ? parseFloat(r.mem) : null,
+    cpuAvgPct:        r.cpu     != null ? parseFloat(r.cpu)     : null,
+    cpuMaxPct:        r.cpu_max != null ? parseFloat(r.cpu_max) : null,
+    memoryUsedAvgPct: r.mem     != null ? parseFloat(r.mem)     : null,
+    memoryUsedMaxPct: r.mem_max != null ? parseFloat(r.mem_max) : null,
   }));
 }
 
