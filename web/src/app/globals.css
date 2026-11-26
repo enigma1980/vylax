@@ -385,9 +385,13 @@ html, body {
 .nav-link.nav-active { background: var(--active-nav); color: var(--accent); }
 
 .nav-badge {
-  position: absolute; top: 8px; right: 8px;
-  width: 9px; height: 9px; border-radius: 50%;
-  background: var(--amber); pointer-events: none;
+  position: absolute; top: 4px; right: 4px;
+  min-width: 16px; height: 16px; border-radius: 8px;
+  padding: 0 4px; box-sizing: border-box;
+  background: var(--amber); color: #0A0F1E;
+  font-size: 10px; font-weight: 700; line-height: 16px;
+  text-align: center; white-space: nowrap;
+  pointer-events: none;
 }
 
 .nav-spacer { flex: 1; min-height: 8px; }
