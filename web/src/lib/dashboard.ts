@@ -1,6 +1,6 @@
 import { db } from '@/db';
-import { devices, deviceCurrentState, clients, sites, metrics5min, agentEvents } from '@/db/schema';
-import { eq, and, ne, count, isNotNull, sql, inArray, desc } from 'drizzle-orm';
+import { devices, deviceCurrentState, clients, sites, metrics5min, agentEvents, inventorySnapshots } from '@/db/schema';
+import { eq, and, ne, count, isNotNull, sql, inArray, desc, gte } from 'drizzle-orm';
 import {
   classifyDevice,
   clientSemaphore,
@@ -423,6 +423,200 @@ export async function getClientDetail(orgId: string, clientId: string): Promise<
     sites:       siteRows,
     deviceCount: Number(deviceCount[0]?.n ?? 0),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Ficha del equipo
+// ---------------------------------------------------------------------------
+
+export interface DeviceDetail {
+  id:               string;
+  hostname:         string;
+  status:           DeviceStatus;
+  effType:          string | null;
+  deviceType:       string | null;
+  deviceTypeHint:   string | null;
+  agentVersion:     string | null;
+  createdAt:        string;
+  clientId:         string | null;
+  clientName:       string | null;
+  siteId:           string | null;
+  siteName:         string | null;
+  lastSeenAt:       string | null;
+  // estado actual
+  osInfo:           { name?: string; build?: string; manufacturer?: string; install_date?: string } | null;
+  cpuAvgPct:        number | null;
+  memoryUsedAvgPct: number | null;
+  ramTotalBytes:    number | null;
+  volumes:          Array<{ mount: string; label?: string; free_bytes: number; total_bytes: number }> | null;
+  antivirus:        Array<{ product: string; enabled: boolean; up_to_date: boolean }> | null;
+  windowsUpdate:    { last_installed_at?: string; days_since_last?: number } | null;
+  physicalDisks:    Array<{ model?: string; type?: string; serial?: string; health: string; predict_failure: boolean; temperature_c?: number; wear_pct?: number }> | null;
+  loggedOnUser:     string | null;
+  agentMemBytes:    number | null;
+  agentCpuPct:      number | null;
+  network:          { adapters?: Array<{ name: string; ipv4?: string[]; mac?: string; link_speed_mbps?: number; gateway?: string; dns?: string[] }> } | null;
+  services:         Array<{ name: string; display_name?: string; status: string }> | null;
+  uptimeSecs:       number | null;
+  lastBootAt:       string | null;
+  rebootPending:    boolean | null;
+  // inventario
+  systemInfo:       { manufacturer?: string; model?: string; bios_version?: string; bios_date?: string } | null;
+  cpuInfo:          { name?: string; cores?: number; logical_processors?: number } | null;
+  memoryTotalBytes: number | null;
+  // eventos
+  agentEvents:      Array<{ eventType: string; occurredAt: string; data: unknown }>;
+}
+
+export async function getDevice(orgId: string, deviceId: string): Promise<DeviceDetail | null> {
+  const row = await db
+    .select({
+      id:               devices.id,
+      hostname:         devices.hostname,
+      deviceType:       devices.deviceType,
+      deviceTypeHint:   devices.deviceTypeHint,
+      agentVersion:     devices.agentVersion,
+      createdAt:        devices.createdAt,
+      clientId:         devices.clientId,
+      siteId:           devices.siteId,
+      lastSeenAt:       devices.lastSeenAt,
+      organizationId:   devices.organizationId,
+      // estado
+      cpuAvgPct:        deviceCurrentState.cpuAvgPct,
+      memoryUsedAvgPct: deviceCurrentState.memoryUsedAvgPct,
+      ramTotalBytes:    deviceCurrentState.ramTotalBytes,
+      volumes:          deviceCurrentState.volumes,
+      antivirus:        deviceCurrentState.antivirus,
+      windowsUpdate:    deviceCurrentState.windowsUpdate,
+      physicalDisks:    deviceCurrentState.physicalDisks,
+      osInfo:           deviceCurrentState.osInfo,
+      loggedOnUser:     deviceCurrentState.loggedOnUser,
+      agentMemBytes:    deviceCurrentState.agentMemBytes,
+      agentCpuPct:      deviceCurrentState.agentCpuPct,
+      network:          deviceCurrentState.network,
+      services:         deviceCurrentState.services,
+      uptimeSecs:       deviceCurrentState.uptimeSecs,
+      lastBootAt:       deviceCurrentState.lastBootAt,
+      rebootPending:    deviceCurrentState.rebootPending,
+    })
+    .from(devices)
+    .leftJoin(deviceCurrentState, eq(devices.id, deviceCurrentState.deviceId))
+    .where(and(eq(devices.id, deviceId), eq(devices.organizationId, orgId)))
+    .limit(1);
+
+  if (!row[0]) return null;
+  const r = row[0];
+
+  if (r.organizationId !== orgId) return null;
+
+  // Inventario más reciente
+  const invRow = await db
+    .select({
+      systemInfo:       inventorySnapshots.systemInfo,
+      cpuInfo:          inventorySnapshots.cpuInfo,
+      memoryTotalBytes: inventorySnapshots.memoryTotalBytes,
+    })
+    .from(inventorySnapshots)
+    .where(and(eq(inventorySnapshots.deviceId, deviceId), eq(inventorySnapshots.organizationId, orgId)))
+    .orderBy(desc(inventorySnapshots.collectedAt))
+    .limit(1);
+
+  // Eventos del agente (20 últimos)
+  const evRows = await db
+    .select({ eventType: agentEvents.eventType, occurredAt: agentEvents.occurredAt, data: agentEvents.data })
+    .from(agentEvents)
+    .where(and(eq(agentEvents.deviceId, deviceId), eq(agentEvents.organizationId, orgId)))
+    .orderBy(desc(agentEvents.occurredAt))
+    .limit(20);
+
+  // Cliente y sede
+  const [clientRow, siteRow] = await Promise.all([
+    r.clientId
+      ? db.query.clients.findFirst({ where: and(eq(clients.id, r.clientId), eq(clients.organizationId, orgId)) })
+      : Promise.resolve(null),
+    r.siteId
+      ? db.query.sites.findFirst({ where: and(eq(sites.id, r.siteId), eq(sites.organizationId, orgId)) })
+      : Promise.resolve(null),
+  ]);
+
+  const effType     = effectiveDeviceType(r);
+  const latestEvent = evRows[0]?.eventType ?? null;
+  const status      = classifyDevice(r.lastSeenAt, effType, latestEvent);
+  const inv         = invRow[0] ?? null;
+
+  return {
+    id:               r.id,
+    hostname:         r.hostname,
+    status,
+    effType,
+    deviceType:       r.deviceType,
+    deviceTypeHint:   r.deviceTypeHint,
+    agentVersion:     r.agentVersion ?? null,
+    createdAt:        r.createdAt.toISOString(),
+    clientId:         r.clientId ?? null,
+    clientName:       clientRow?.name ?? null,
+    siteId:           r.siteId ?? null,
+    siteName:         siteRow?.name ?? null,
+    lastSeenAt:       r.lastSeenAt?.toISOString() ?? null,
+    osInfo:           r.osInfo as DeviceDetail['osInfo'],
+    cpuAvgPct:        r.cpuAvgPct ?? null,
+    memoryUsedAvgPct: r.memoryUsedAvgPct ?? null,
+    ramTotalBytes:    r.ramTotalBytes ?? null,
+    volumes:          r.volumes as DeviceDetail['volumes'],
+    antivirus:        r.antivirus as DeviceDetail['antivirus'],
+    windowsUpdate:    r.windowsUpdate as DeviceDetail['windowsUpdate'],
+    physicalDisks:    r.physicalDisks as DeviceDetail['physicalDisks'],
+    loggedOnUser:     r.loggedOnUser ?? null,
+    agentMemBytes:    r.agentMemBytes ?? null,
+    agentCpuPct:      r.agentCpuPct ?? null,
+    network:          r.network as DeviceDetail['network'],
+    services:         r.services as DeviceDetail['services'],
+    uptimeSecs:       r.uptimeSecs ?? null,
+    lastBootAt:       r.lastBootAt?.toISOString() ?? null,
+    rebootPending:    r.rebootPending ?? null,
+    systemInfo:       inv?.systemInfo as DeviceDetail['systemInfo'] ?? null,
+    cpuInfo:          inv?.cpuInfo as DeviceDetail['cpuInfo'] ?? null,
+    memoryTotalBytes: inv?.memoryTotalBytes ?? null,
+    agentEvents:      evRows.map(e => ({
+      eventType:  e.eventType,
+      occurredAt: e.occurredAt.toISOString(),
+      data:       e.data,
+    })),
+  };
+}
+
+export interface MetricPoint {
+  ts:               string;
+  cpuAvgPct:        number | null;
+  memoryUsedAvgPct: number | null;
+}
+
+export async function getDeviceMetrics(
+  orgId: string,
+  deviceId: string,
+  period: '24h' | '7d',
+): Promise<MetricPoint[]> {
+  const trunc    = period === '24h' ? 'hour' : 'day';
+  const interval = period === '24h' ? '24 hours' : '7 days';
+
+  const rows = await db.execute<{ ts: string; cpu: string | null; mem: string | null }>(sql`
+    SELECT
+      date_trunc(${trunc}, period_start)::text AS ts,
+      AVG(cpu_avg_pct)::text                   AS cpu,
+      AVG(memory_used_avg_pct)::text           AS mem
+    FROM metrics_5min
+    WHERE device_id        = ${deviceId}
+      AND organization_id  = ${orgId}
+      AND period_start    >= NOW() - ${sql.raw(`INTERVAL '${interval}'`)}
+    GROUP BY 1
+    ORDER BY 1
+  `);
+
+  return (rows as Array<{ ts: string; cpu: string | null; mem: string | null }>).map(r => ({
+    ts:               r.ts,
+    cpuAvgPct:        r.cpu != null ? parseFloat(r.cpu) : null,
+    memoryUsedAvgPct: r.mem != null ? parseFloat(r.mem) : null,
+  }));
 }
 
 export async function getDevicesForClient(orgId: string, clientId: string): Promise<DeviceRow[]> {
