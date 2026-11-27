@@ -16,10 +16,6 @@ export function PanelNav({ pendingCount }: NavProps) {
 
   return (
     <nav className="panel-nav" aria-label="Menú principal">
-      <a href="/" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', flexShrink: 0 }} aria-label="Inicio">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/guaitiq-simbolo.png" alt="Guaitiq" width={36} height={36} style={{ display: 'block' }} />
-      </a>
       <NavLink href="/" label="Vista general" active={active('/')}>
         <IconGrid />
       </NavLink>

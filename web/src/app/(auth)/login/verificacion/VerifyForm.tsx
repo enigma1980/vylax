@@ -81,6 +81,11 @@ export function VerifyForm({ method, email }: { method: 'totp' | 'email' | null;
     <div className="auth-split">
       <main className="auth-left">
         <div className="auth-card">
+          <div className="auth-logo">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/guaitiq-logo-blanco.png" alt="Guaitiq" height={36} style={{ display: 'block' }} />
+          </div>
+
           <button
             type="button"
             className="btn-back"

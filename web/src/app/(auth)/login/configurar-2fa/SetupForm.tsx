@@ -142,6 +142,10 @@ export function SetupForm({ isAdmin }: { isAdmin: boolean }) {
       <div className="auth-split">
         <main className="auth-left">
           <div className="auth-card auth-card-wide">
+            <div className="auth-logo">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/guaitiq-logo-blanco.png" alt="Guaitiq" height={36} style={{ display: 'block' }} />
+            </div>
             <div className="auth-heading-wrap">
               <h1 className="auth-heading">Configura TOTP</h1>
               <p className="auth-sub" style={{ margin: 0 }}>Generando código QR…</p>
@@ -167,6 +171,10 @@ export function SetupForm({ isAdmin }: { isAdmin: boolean }) {
       <div className="auth-split">
         <main className="auth-left">
           <div className="auth-card auth-card-wide">
+            <div className="auth-logo">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/guaitiq-logo-blanco.png" alt="Guaitiq" height={36} style={{ display: 'block' }} />
+            </div>
             <div className="auth-heading-wrap">
               <h1 className="auth-heading">Escanea el código QR</h1>
               <p className="auth-sub" style={{ margin: 0 }}>
@@ -223,6 +231,10 @@ export function SetupForm({ isAdmin }: { isAdmin: boolean }) {
     <div className="auth-split">
       <main className="auth-left">
         <div className="auth-card auth-card-wide">
+          <div className="auth-logo">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/guaitiq-logo-blanco.png" alt="Guaitiq" height={36} style={{ display: 'block' }} />
+          </div>
           <div className="auth-heading-wrap">
             <h1 className="auth-heading">Guarda tus códigos de recuperación</h1>
           </div>
